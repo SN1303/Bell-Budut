@@ -103,25 +103,31 @@ function initSSE() {
 
       } else if (data.type === 'SERVER_AUDIO_STOPPED') {
         if (activePlayback && activePlayback.targetType === 'server') {
-          if (!data.audio_code || (activePlayback.code || '').toLowerCase() === (data.audio_code || '').toLowerCase()) {
-            activePlayback = null;
-            hideFloatingPlayerBar();
-            updateAllPlayButtonsUI();
+          const elapsed = activePlayback.startTime ? (Date.now() - activePlayback.startTime) : 9999;
+          // Protect against premature false-stop packets during first 2.5 seconds
+          if (elapsed >= 2500) {
+            if (!data.audio_code || (activePlayback.code || '').toLowerCase() === (data.audio_code || '').toLowerCase()) {
+              activePlayback = null;
+              hideFloatingPlayerBar();
+              updateAllPlayButtonsUI();
+            }
           }
         }
       } else if (data.type === 'SERVER_AUDIO_STARTED') {
         serverCurrentPlayingCode = data.audio_code || '';
         const audioObj = (globalAudios || []).find(a => (a.code || '').toLowerCase() === (data.audio_code || '').toLowerCase());
-        activePlayback = {
-          targetType: 'server',
-          targetId: `srv-${data.audio_code}`,
-          code: data.audio_code,
-          name: audioObj ? audioObj.name : (data.audio_name || data.audio_code),
-          schedId: null
-        };
-        lastServerPlayTriggerTime = Date.now();
-        updateAllPlayButtonsUI();
-        showFloatingPlayerBar('Speaker Server (Soundcard)', `[${data.audio_code}] ${data.audio_name}`);
+        if (!activePlayback || activePlayback.targetType !== 'server' || (activePlayback.code || '').toLowerCase() !== (data.audio_code || '').toLowerCase()) {
+          activePlayback = {
+            targetType: 'server',
+            targetId: `srv-${data.audio_code}`,
+            code: data.audio_code,
+            name: audioObj ? audioObj.name : (data.audio_name || data.audio_code),
+            schedId: null,
+            startTime: Date.now()
+          };
+          updateAllPlayButtonsUI();
+          showFloatingPlayerBar('Speaker Server (Soundcard)', `[${data.audio_code}] ${data.audio_name}`);
+        }
       } else if (data.type === 'BELL_RING') {
         // Live Bell Ring Event
         handleBellRingEvent(data);
@@ -1195,13 +1201,13 @@ async function loadAudios() {
         <td class="py-3 px-4 text-xs font-mono text-gray-500">${a.filename}</td>
         <td class="py-3 px-4 text-xs text-gray-500">${a.description || '-'}</td>
         <td class="py-3 px-4 text-center">
-          <button onclick="handlePlayAudioWeb('${a.code}')" id="btn-play-web-${a.code}" data-code="${a.code}" data-folder="${a.is_folder}" class="btn-browser-audio px-2.5 py-1.5 ${a.is_folder ? 'bg-amber-200 hover:bg-amber-300 text-amber-900' : 'bg-blue-100 hover:bg-blue-200 text-blue-800'} rounded-lg text-xs font-semibold transition cursor-pointer">
-            ▶ ${a.is_folder ? 'Dengar Acak di Web' : 'Dengar di Web'}
+          <button onclick="handlePlayAudioWeb('${a.code}')" id="btn-play-web-${a.code}" data-code="${a.code}" data-folder="${a.is_folder}" class="btn-browser-audio px-3 py-1.5 inline-flex items-center justify-center gap-1.5 ${a.is_folder ? 'bg-amber-100 hover:bg-amber-200 text-amber-900 border border-amber-300' : 'bg-blue-100 hover:bg-blue-200 text-blue-900 border border-blue-200'} rounded-lg text-xs font-bold transition shadow-xs cursor-pointer whitespace-nowrap">
+            <span>▶</span> <span>${a.is_folder ? 'Dengar Acak di Web' : 'Dengar di Web'}</span>
           </button>
         </td>
         <td class="py-3 px-4 text-center">
-          <button onclick="handlePlayAudioServer('${a.code}')" id="btn-play-srv-${a.code}" data-code="${a.code}" data-folder="${a.is_folder}" class="btn-server-audio px-2.5 py-1.5 ${a.is_folder ? 'bg-amber-200 hover:bg-amber-300 text-amber-900' : 'bg-green-100 hover:bg-green-200 text-green-800'} rounded-lg text-xs font-semibold transition cursor-pointer">
-            🔊 ${a.is_folder ? 'Bunyikan Acak di Server' : 'Bunyikan di Speaker'}
+          <button onclick="handlePlayAudioServer('${a.code}')" id="btn-play-srv-${a.code}" data-code="${a.code}" data-folder="${a.is_folder}" class="btn-server-audio px-3 py-1.5 inline-flex items-center justify-center gap-1.5 ${a.is_folder ? 'bg-amber-100 hover:bg-amber-200 text-amber-900 border border-amber-300' : 'bg-green-100 hover:bg-green-200 text-green-900 border border-green-200'} rounded-lg text-xs font-bold transition shadow-xs cursor-pointer whitespace-nowrap">
+            <span>🔊</span> <span>${a.is_folder ? 'Bunyikan Acak di Server' : 'Bunyikan di Speaker'}</span>
           </button>
         </td>
         <td class="py-3 px-4 text-right">
@@ -1287,17 +1293,17 @@ function updateAllPlayButtonsUI() {
 
   // 2. Audio Library Web Buttons (Tab 3)
   document.querySelectorAll('.btn-browser-audio').forEach(btn => {
-    const code = btn.dataset.code;
+    const code = (btn.dataset.code || '').toLowerCase();
     const isFld = btn.dataset.folder === 'true';
-    const isThisPlaying = activePlayback && activePlayback.targetType === 'web' && activePlayback.code.toLowerCase() === (code || '').toLowerCase();
+    const isThisPlaying = activePlayback && activePlayback.targetType === 'web' && (activePlayback.code || '').toLowerCase() === code;
 
     if (isThisPlaying) {
-      btn.innerHTML = '⏹ Hentikan Web';
-      btn.className = 'btn-browser-audio px-2.5 py-1.5 bg-red-600 hover:bg-red-700 text-white rounded-lg text-xs font-bold shadow animate-pulse transition cursor-pointer';
+      btn.innerHTML = '<span>⏹</span> <span>Hentikan Web</span>';
+      btn.className = 'btn-browser-audio px-3 py-1.5 inline-flex items-center justify-center gap-1.5 bg-red-600 hover:bg-red-700 text-white border border-red-700 rounded-lg text-xs font-bold shadow-md animate-pulse transition cursor-pointer whitespace-nowrap';
       btn.title = 'Hentikan pemutaran lagu ini';
     } else {
-      btn.innerHTML = isFld ? '▶ Dengar Acak di Web' : '▶ Dengar di Web';
-      btn.className = `btn-browser-audio px-2.5 py-1.5 ${isFld ? 'bg-amber-200 hover:bg-amber-300 text-amber-900' : 'bg-blue-100 hover:bg-blue-200 text-blue-800'} rounded-lg text-xs font-semibold transition cursor-pointer`;
+      btn.innerHTML = `<span>▶</span> <span>${isFld ? 'Dengar Acak di Web' : 'Dengar di Web'}</span>`;
+      btn.className = `btn-browser-audio px-3 py-1.5 inline-flex items-center justify-center gap-1.5 ${isFld ? 'bg-amber-100 hover:bg-amber-200 text-amber-900 border border-amber-300' : 'bg-blue-100 hover:bg-blue-200 text-blue-900 border border-blue-200'} rounded-lg text-xs font-bold transition shadow-xs cursor-pointer whitespace-nowrap`;
       btn.title = 'Dengarkan pratinjau lagu ini di browser';
     }
   });
@@ -1309,12 +1315,12 @@ function updateAllPlayButtonsUI() {
     const isThisPlaying = activePlayback && activePlayback.targetType === 'server' && (activePlayback.code || '').toLowerCase() === code;
 
     if (isThisPlaying) {
-      btn.innerHTML = '⏹ Hentikan Server';
-      btn.className = 'btn-server-audio px-2.5 py-1.5 bg-red-600 hover:bg-red-700 text-white rounded-lg text-xs font-bold shadow animate-pulse transition cursor-pointer';
+      btn.innerHTML = '<span>⏹</span> <span>Hentikan Server</span>';
+      btn.className = 'btn-server-audio px-3 py-1.5 inline-flex items-center justify-center gap-1.5 bg-red-600 hover:bg-red-700 text-white border border-red-700 rounded-lg text-xs font-bold shadow-md animate-pulse transition cursor-pointer whitespace-nowrap';
       btn.title = 'Hentikan pemutaran lagu di speaker server';
     } else {
-      btn.innerHTML = isFld ? '🔊 Bunyikan Acak di Server' : '🔊 Bunyikan di Speaker';
-      btn.className = `btn-server-audio px-2.5 py-1.5 ${isFld ? 'bg-amber-200 hover:bg-amber-300 text-amber-900' : 'bg-green-100 hover:bg-green-200 text-green-800'} rounded-lg text-xs font-semibold transition cursor-pointer`;
+      btn.innerHTML = `<span>🔊</span> <span>${isFld ? 'Bunyikan Acak di Server' : 'Bunyikan di Speaker'}</span>`;
+      btn.className = `btn-server-audio px-3 py-1.5 inline-flex items-center justify-center gap-1.5 ${isFld ? 'bg-amber-100 hover:bg-amber-200 text-amber-900 border border-amber-300' : 'bg-green-100 hover:bg-green-200 text-green-900 border border-green-200'} rounded-lg text-xs font-bold transition shadow-xs cursor-pointer whitespace-nowrap`;
       btn.title = 'Bunyikan lagu ini di speaker server';
     }
   });
@@ -1336,10 +1342,7 @@ function stopBrowserAudio() {
 }
 
 async function stopServerAudio() {
-  serverCurrentPlayingCode = '';
-  activePlayback = null;
-  hideFloatingPlayerBar();
-  updateAllPlayButtonsUI();
+  stopAllAudioSilent();
   try {
     await fetch('/api/audio/stop-server', { method: 'POST' });
   } catch (err) {}
@@ -1347,9 +1350,7 @@ async function stopServerAudio() {
 
 function stopAllAudioSilent() {
   stopBrowserAudio();
-  if (activePlayback && activePlayback.targetType === 'server') {
-    fetch('/api/audio/stop-server', { method: 'POST' }).catch(() => {});
-  }
+  fetch('/api/audio/stop-server', { method: 'POST' }).catch(() => {});
   activePlayback = null;
   hideFloatingPlayerBar();
   updateAllPlayButtonsUI();
@@ -1357,9 +1358,7 @@ function stopAllAudioSilent() {
 
 function stopAllAudio() {
   stopBrowserAudio();
-  if (activePlayback && activePlayback.targetType === 'server') {
-    fetch('/api/audio/stop-server', { method: 'POST' }).catch(() => {});
-  }
+  fetch('/api/audio/stop-server', { method: 'POST' }).catch(() => {});
   activePlayback = null;
   hideFloatingPlayerBar();
   updateAllPlayButtonsUI();
@@ -1425,8 +1424,11 @@ async function handlePlayScheduleRow(schedId, audioCode) {
 
 // 2. Play "Dengar di Web" in Audio Library
 async function handlePlayAudioWeb(code) {
+  const normCode = (code || '').toLowerCase();
+  const isCurrentlyPlayingThis = activePlayback && activePlayback.targetType === 'web' && (activePlayback.code || '').toLowerCase() === normCode;
+
   // If user clicked the button that is already playing on web -> STOP IT!
-  if (activePlayback && activePlayback.targetType === 'web' && activePlayback.code.toLowerCase() === code.toLowerCase()) {
+  if (isCurrentlyPlayingThis) {
     stopBrowserAudio();
     activePlayback = null;
     hideFloatingPlayerBar();
@@ -1435,13 +1437,13 @@ async function handlePlayAudioWeb(code) {
     return;
   }
 
-  // If server sound was playing, stop it cleanly
+  // Stop any other active audio cleanly
+  stopBrowserAudio();
   if (activePlayback && activePlayback.targetType === 'server') {
     fetch('/api/audio/stop-server', { method: 'POST' }).catch(() => {});
   }
-  stopBrowserAudio();
 
-  const audio = globalAudios.find(a => a.code.toLowerCase() === code.toLowerCase());
+  const audio = (globalAudios || []).find(a => (a.code || '').toLowerCase() === normCode);
   const audioName = audio ? audio.name : code;
 
   activePlayback = {
@@ -1449,7 +1451,8 @@ async function handlePlayAudioWeb(code) {
     targetId: `web-${code}`,
     code: code,
     name: audioName,
-    schedId: null
+    schedId: null,
+    startTime: Date.now()
   };
 
   updateAllPlayButtonsUI();
@@ -1458,7 +1461,7 @@ async function handlePlayAudioWeb(code) {
   if (!audioPlayer) audioPlayer = document.getElementById('browserAudioPlayer');
 
   audioPlayer.onended = () => {
-    if (activePlayback && activePlayback.targetType === 'web' && activePlayback.code.toLowerCase() === code.toLowerCase()) {
+    if (activePlayback && activePlayback.targetType === 'web' && (activePlayback.code || '').toLowerCase() === normCode) {
       activePlayback = null;
       hideFloatingPlayerBar();
       updateAllPlayButtonsUI();
@@ -1475,43 +1478,51 @@ async function handlePlayAudioWeb(code) {
     audioPlayer.src = `/api/audio/stream/${encodeURIComponent(code)}?t=${Date.now()}`;
     await audioPlayer.play();
   } catch (err) {
-    console.warn('Playback interrupted or blocked:', err);
+    console.warn('Playback interrupted:', err);
   }
 }
 
-// 3. Play "Bunyikan di Speaker" in Audio Library
+// 3. Play "Bunyikan di Speaker" in Audio Library (Exact 1:1 Mirror of Web Behavior!)
 async function handlePlayAudioServer(code) {
   const normCode = (code || '').toLowerCase();
-  const currentActiveCode = activePlayback && activePlayback.targetType === 'server' ? (activePlayback.code || '').toLowerCase() : '';
+  const isCurrentlyPlayingThis = activePlayback && activePlayback.targetType === 'server' && (activePlayback.code || '').toLowerCase() === normCode;
 
-  // If user clicked the button that is ALREADY playing on server -> STOP IT!
-  if (currentActiveCode === normCode) {
-    stopServerAudio();
+  // If user clicked the button that is ALREADY playing on server -> STOP IT IMMEDIATELY!
+  if (isCurrentlyPlayingThis) {
+    activePlayback = null;
+    hideFloatingPlayerBar();
+    updateAllPlayButtonsUI();
     showToast('Pemutaran speaker server dihentikan', 'info');
+    try {
+      await fetch('/api/audio/stop-server', { method: 'POST' });
+    } catch (err) {}
     return;
   }
 
-  // 1. Instantly silence any browser audio
+  // Silence any browser audio first
   stopBrowserAudio();
+  // If another server track was playing, stop it cleanly
+  if (activePlayback && activePlayback.targetType === 'server') {
+    fetch('/api/audio/stop-server', { method: 'POST' }).catch(() => {});
+  }
 
-  const audio = globalAudios.find(a => a.code.toLowerCase() === code.toLowerCase());
+  const audio = (globalAudios || []).find(a => (a.code || '').toLowerCase() === normCode);
   const audioName = audio ? audio.name : code;
 
-  lastServerPlayTriggerTime = Date.now();
-
-  // 2. Register new active playback immediately (reverts previous song button to 🔊, sets this one to ⏹)
+  // 1. Immediately register active server playback (button flips to ⏹ Hentikan Server instantly!)
   activePlayback = {
     targetType: 'server',
     targetId: `srv-${code}`,
     code: code,
     name: audioName,
-    schedId: null
+    schedId: null,
+    startTime: Date.now()
   };
 
   updateAllPlayButtonsUI();
   showFloatingPlayerBar('Speaker Server (Soundcard)', `[${code}] ${audioName}`);
 
-  // 3. Send test-server command (Go server handles track-switch atomically without client race conditions)
+  // 2. Send play command to server
   try {
     const res = await fetch('/api/audio/test-server', {
       method: 'POST',
@@ -1523,7 +1534,7 @@ async function handlePlayAudioServer(code) {
       showToast(json.data || `Memutar [${code}] di speaker server`, 'info');
     } else {
       showToast(json.error || 'Gagal memutar audio di server', 'error');
-      if (activePlayback && activePlayback.targetType === 'server' && activePlayback.code.toLowerCase() === code.toLowerCase()) {
+      if (activePlayback && activePlayback.targetType === 'server' && (activePlayback.code || '').toLowerCase() === normCode) {
         activePlayback = null;
         hideFloatingPlayerBar();
         updateAllPlayButtonsUI();
@@ -1531,7 +1542,7 @@ async function handlePlayAudioServer(code) {
     }
   } catch (err) {
     showToast('Gagal terhubung ke server', 'error');
-    if (activePlayback && activePlayback.targetType === 'server' && activePlayback.code.toLowerCase() === code.toLowerCase()) {
+    if (activePlayback && activePlayback.targetType === 'server' && (activePlayback.code || '').toLowerCase() === normCode) {
       activePlayback = null;
       hideFloatingPlayerBar();
       updateAllPlayButtonsUI();
@@ -1548,9 +1559,6 @@ function testPlayServer(code) {
 }
 function updatePlayButtonsState() {
   updateAllPlayButtonsUI();
-}
-function stopServerAudio() {
-  stopAllAudio();
 }
 
 let selectedAudioFileList = [];

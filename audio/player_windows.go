@@ -132,9 +132,14 @@ func (p *windowsPlayer) Play(filePath string) error {
 
 			elapsedMs := time.Since(startTime).Milliseconds()
 
-			// While elapsed time is well within the known duration (with 1s safety margin),
-			// playback is guaranteed to be running. Ignore any transient MCI driver busy errors!
-			if durationMs > 1500 && elapsedMs < durationMs-1000 {
+			// Safety 1: Never trigger finish within the first 1500ms of any track
+			if elapsedMs < 1500 {
+				p.mu.Unlock()
+				continue
+			}
+
+			// Safety 2: While elapsed time is well within known duration, playback is guaranteed running
+			if durationMs > 2000 && elapsedMs < durationMs-500 {
 				p.mu.Unlock()
 				continue
 			}
@@ -145,16 +150,14 @@ func (p *windowsPlayer) Play(filePath string) error {
 
 			isFinished := false
 			if durationMs > 0 {
-				if (posMs > 0 && posMs >= durationMs-200) || elapsedMs >= durationMs+1000 {
+				if (posMs > 0 && posMs >= durationMs-200) || elapsedMs >= durationMs+2000 {
 					isFinished = true
 				}
 			}
-			if status == "stopped" && elapsedMs > 1000 {
-				isFinished = true
-			}
-			if status != "playing" && (durationMs <= 0 || elapsedMs >= durationMs) {
+
+			if status == "stopped" {
 				consecutiveStopped++
-				if consecutiveStopped >= 2 {
+				if consecutiveStopped >= 2 && elapsedMs >= 2000 {
 					isFinished = true
 				}
 			} else if status == "playing" {
@@ -166,6 +169,7 @@ func (p *windowsPlayer) Play(filePath string) error {
 					p.isPlaying = false
 					p.currentFile = ""
 					p.currentAlias = ""
+					p.sendMCI(fmt.Sprintf("stop %s", targetAlias))
 					p.sendMCI(fmt.Sprintf("close %s", targetAlias))
 					onEndFn := p.onEnd
 					p.mu.Unlock()
