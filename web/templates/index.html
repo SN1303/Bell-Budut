@@ -878,9 +878,26 @@
           </div>
         </div>
 
-        <!-- Multiple Audio Info Badge (Shown when >1 file is selected) -->
+        <!-- As Folder Option (Shown when >1 file is selected) -->
+        <div id="divAsFolderOption" class="hidden bg-amber-50/90 p-3 rounded-xl border border-amber-200 space-y-2.5">
+          <label class="flex items-center space-x-2 font-bold text-amber-950 cursor-pointer">
+            <input type="checkbox" id="chkAsFolder" name="as_folder" onchange="toggleAsFolderUI()" class="rounded text-amber-600 focus:ring-amber-500">
+            <span>📁 Satukan Menjadi 1 Folder Lagu Acak (Shuffle / Random)</span>
+          </label>
+          <div id="divFolderDetails" class="hidden pl-6 space-y-2">
+            <p class="text-[11px] text-amber-800 leading-relaxed">
+              Kumpulan lagu ini akan digabung menjadi 1 pilihan playlist (Kode unik <code>FLD-XX</code>). Setiap kali bel berbunyi dengan kode ini, sistem akan memutar salah satu lagunya secara acak bergantian!
+            </p>
+            <div>
+              <label class="block font-bold text-amber-950 mb-1 text-[11px]">Nama Folder Playlist:</label>
+              <input type="text" id="uploadFolderName" name="folder_name" placeholder="Contoh: Lagu Daerah Lampung & Nasional" class="w-full border border-amber-300 rounded-lg p-2 bg-white text-xs text-gray-800">
+            </div>
+          </div>
+        </div>
+
+        <!-- Multiple Audio Info Badge (Shown when >1 file is selected and not as folder) -->
         <div id="multiAudioBadge" class="hidden bg-green-50 p-3 rounded-xl border border-green-200 text-[11px] text-green-900 leading-relaxed">
-          💡 <b>Upload Massal Aktif:</b> Setiap lagu akan otomatis menggunakan judul file lagunya, dan sistem membuatkan Kode Audio unik (<code>AUD-XX</code>) secara berurutan.
+          💡 <b>Upload Massal Terpisah:</b> Setiap lagu akan tersimpan sebagai nada tersendiri dengan judul lagunya masing-masing dan Kode Audio unik (<code>AUD-XX</code>) berurutan.
         </div>
 
         <div class="flex space-x-2 pt-2 border-t border-gray-100">
@@ -1166,7 +1183,7 @@
   <audio id="browserAudioPlayer" preload="auto"></audio>
 
   <!-- Load Main Application Logic -->
-  <script src="/static/js/app.js?v=3.0"></script>
+  <script src="/static/js/app.js?v=3.1"></script>
 </body>
 </html>
 

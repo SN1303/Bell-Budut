@@ -1515,6 +1515,10 @@ function clearSelectedAudioFiles() {
   const input = document.getElementById('uploadAudioFiles');
   if (input) input.value = '';
   selectedAudioFileList = [];
+  const chk = document.getElementById('chkAsFolder');
+  if (chk) chk.checked = false;
+  const fldName = document.getElementById('uploadFolderName');
+  if (fldName) fldName.value = '';
   renderSelectedAudioFiles();
 }
 
@@ -1526,12 +1530,35 @@ function handleAudioFilesSelected(files) {
   renderSelectedAudioFiles();
 }
 
+function toggleAsFolderUI() {
+  const chk = document.getElementById('chkAsFolder');
+  const divDetails = document.getElementById('divFolderDetails');
+  const multiBadge = document.getElementById('multiAudioBadge');
+  const btnText = document.getElementById('btnSubmitAudioUploadText');
+  const folderNameInput = document.getElementById('uploadFolderName');
+
+  if (chk && chk.checked) {
+    if (divDetails) divDetails.classList.remove('hidden');
+    if (multiBadge) multiBadge.classList.add('hidden');
+    if (btnText) btnText.innerText = `Satukan Jadi Folder Acak (${selectedAudioFileList.length} Lagu)`;
+    if (folderNameInput && !folderNameInput.value) {
+      folderNameInput.value = 'Lagu Daerah & Nasional';
+    }
+    if (folderNameInput) folderNameInput.focus();
+  } else {
+    if (divDetails) divDetails.classList.add('hidden');
+    if (multiBadge) multiBadge.classList.remove('hidden');
+    if (btnText) btnText.innerText = `Upload ${selectedAudioFileList.length} Lagu Sekaligus`;
+  }
+}
+
 function renderSelectedAudioFiles() {
   const box = document.getElementById('selectedAudioPreviewBox');
   const countText = document.getElementById('selectedAudioCountText');
   const list = document.getElementById('selectedAudioList');
   const singleFields = document.getElementById('singleAudioFields');
   const multiBadge = document.getElementById('multiAudioBadge');
+  const divAsFolder = document.getElementById('divAsFolderOption');
   const nameInput = document.getElementById('uploadAudioName');
   const btnText = document.getElementById('btnSubmitAudioUploadText');
 
@@ -1541,6 +1568,7 @@ function renderSelectedAudioFiles() {
     box.classList.add('hidden');
     if (singleFields) singleFields.classList.remove('hidden');
     if (multiBadge) multiBadge.classList.add('hidden');
+    if (divAsFolder) divAsFolder.classList.add('hidden');
     if (btnText) btnText.innerText = 'Upload Lagu Sekarang';
     if (nameInput) nameInput.value = '';
     return;
@@ -1564,14 +1592,15 @@ function renderSelectedAudioFiles() {
   if (selectedAudioFileList.length === 1) {
     if (singleFields) singleFields.classList.remove('hidden');
     if (multiBadge) multiBadge.classList.add('hidden');
+    if (divAsFolder) divAsFolder.classList.add('hidden');
     if (nameInput && !nameInput.value) {
       nameInput.value = selectedAudioFileList[0].name.replace(/\.[^/.]+$/, '');
     }
     if (btnText) btnText.innerText = 'Upload 1 Lagu';
   } else {
     if (singleFields) singleFields.classList.add('hidden');
-    if (multiBadge) multiBadge.classList.remove('hidden');
-    if (btnText) btnText.innerText = `Upload ${selectedAudioFileList.length} Lagu Sekaligus`;
+    if (divAsFolder) divAsFolder.classList.remove('hidden');
+    toggleAsFolderUI();
   }
 }
 
@@ -1589,7 +1618,18 @@ async function submitAudioUpload(e) {
     formData.append('audio_files', selectedAudioFileList[i]);
   }
 
-  if (selectedAudioFileList.length === 1) {
+  const isFolder = document.getElementById('chkAsFolder')?.checked;
+  const folderName = document.getElementById('uploadFolderName')?.value.trim();
+
+  if (isFolder && selectedAudioFileList.length > 1) {
+    if (!folderName) {
+      showToast('Silakan ketik nama folder lagu acak terlebih dahulu!', 'warning');
+      document.getElementById('uploadFolderName')?.focus();
+      return;
+    }
+    formData.append('as_folder', 'true');
+    formData.append('folder_name', folderName);
+  } else if (selectedAudioFileList.length === 1) {
     const name = document.getElementById('uploadAudioName')?.value.trim();
     const desc = document.getElementById('uploadAudioDesc')?.value.trim();
     if (name) formData.append('name', name);
@@ -1600,7 +1640,7 @@ async function submitAudioUpload(e) {
   const origBtnContent = btn ? btn.innerHTML : '';
   if (btn) {
     btn.disabled = true;
-    btn.innerHTML = `<span>⏳</span><span>Mengunggah ${selectedAudioFileList.length} lagu...</span>`;
+    btn.innerHTML = `<span>⏳</span><span>Memproses ${selectedAudioFileList.length} lagu...</span>`;
   }
 
   try {
@@ -1610,8 +1650,12 @@ async function submitAudioUpload(e) {
     });
     const json = await res.json();
     if (json.success) {
-      const cnt = json.data.count || 1;
-      showToast(`✅ Berhasil mengunggah ${cnt} lagu audio baru!`, 'success');
+      if (json.data && json.data.is_folder) {
+        showToast(`✅ Berhasil membuat Folder Lagu Acak [${json.data.code}] berisi ${json.data.count} lagu!`, 'success');
+      } else {
+        const cnt = json.data.count || 1;
+        showToast(`✅ Berhasil mengunggah ${cnt} lagu audio baru!`, 'success');
+      }
       closeModal('modalAudioUpload');
       clearSelectedAudioFiles();
       loadAudios();

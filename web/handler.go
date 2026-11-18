@@ -398,6 +398,80 @@ func (s *Server) handleAudioUpload(w http.ResponseWriter, r *http.Request) {
 	customName := strings.TrimSpace(r.FormValue("name"))
 	customDesc := strings.TrimSpace(r.FormValue("description"))
 
+	asFolder := r.FormValue("as_folder") == "true" || r.FormValue("as_folder") == "on"
+	folderName := strings.TrimSpace(r.FormValue("folder_name"))
+
+	// Option A: Save as 1 Random Shuffle Folder (FLD-XX)
+	if asFolder {
+		if folderName == "" {
+			folderName = customName
+		}
+		if folderName == "" {
+			folderName = fmt.Sprintf("Folder Lagu Acak (%s)", time.Now().Format("02/01/2006"))
+		}
+
+		folderRel := fmt.Sprintf("fld_%d", time.Now().Unix())
+		folderAbs := filepath.Join(s.audioDir, folderRel)
+		if err := os.MkdirAll(folderAbs, 0755); err != nil {
+			s.jsonError(w, "Gagal membuat folder di server: "+err.Error(), http.StatusInternalServerError)
+			return
+		}
+
+		savedCount := 0
+		for _, header := range fileHeaders {
+			ext := strings.ToLower(filepath.Ext(header.Filename))
+			if ext != ".mp3" && ext != ".wav" && ext != ".ogg" {
+				continue
+			}
+			file, err := header.Open()
+			if err != nil {
+				continue
+			}
+
+			cleanName := filepath.Base(header.Filename)
+			targetFile := filepath.Join(folderAbs, cleanName)
+			out, err := os.Create(targetFile)
+			if err != nil {
+				file.Close()
+				continue
+			}
+			_, copyErr := io.Copy(out, file)
+			out.Close()
+			file.Close()
+			if copyErr == nil {
+				savedCount++
+			}
+		}
+
+		if savedCount == 0 {
+			os.RemoveAll(folderAbs)
+			s.jsonError(w, "Tidak ada file audio valid yang berhasil disimpan ke dalam folder", http.StatusBadRequest)
+			return
+		}
+
+		desc := customDesc
+		if desc == "" {
+			desc = fmt.Sprintf("Folder acak berisi %d lagu", savedCount)
+		}
+
+		audioRecord, err := s.db.AddAudioFile(folderName, folderRel, desc, 0, true)
+		if err != nil {
+			os.RemoveAll(folderAbs)
+			s.jsonError(w, "Gagal mencatat folder audio di database: "+err.Error(), http.StatusInternalServerError)
+			return
+		}
+
+		s.jsonSuccess(w, map[string]interface{}{
+			"count":     savedCount,
+			"code":      audioRecord.Code,
+			"is_folder": true,
+			"records":   []*database.AudioFile{audioRecord},
+			"messages":  fmt.Sprintf("Berhasil membuat folder acak [%s] (%s) berisi %d lagu", folderName, audioRecord.Code, savedCount),
+		})
+		return
+	}
+
+	// Option B: Save as Individual Audio Files (AUD-XX)
 	var uploadedRecords []*database.AudioFile
 	var errorMessages []string
 
@@ -492,9 +566,14 @@ func (s *Server) handleAudioDelete(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Remove physical file if not builtin
+	// Remove physical file or directory if not builtin
 	if deletedAudio != nil && !deletedAudio.IsBuiltin {
-		_ = os.Remove(filepath.Join(s.audioDir, deletedAudio.Filename))
+		targetPath := filepath.Join(s.audioDir, deletedAudio.Filename)
+		if deletedAudio.IsFolder {
+			_ = os.RemoveAll(targetPath)
+		} else {
+			_ = os.Remove(targetPath)
+		}
 	}
 
 	s.jsonSuccess(w, "Audio berhasil dihapus")
