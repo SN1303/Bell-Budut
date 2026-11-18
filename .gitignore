@@ -1,0 +1,42 @@
+# Compiled Binary
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+
+# Scrap / Junk Archive
+scap/
+scrap/
+
+# SQLite Database & Runtime Files
+data/*.db
+data/*.db-journal
+data/*.db-wal
+data/*.db-shm
+data/*.bak*
+*.db
+*.sqlite
+*.sqlite3
+
+# Uploaded User Audio (Keep only built-in system chimes)
+data/audio/*
+!data/audio/sistem/
+!data/audio/sistem/*.wav
+
+# OS Specific Files
+Thumbs.db
+[Dd]esktop.ini
+.DS_Store
+*.lnk
+
+# Editor / IDE Files
+.vscode/
+.idea/
+*.sublime-project
+*.sublime-workspace
+
+# Logs & Temporary Files
+*.log
+tmp/
+temp/

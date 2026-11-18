@@ -1,0 +1,249 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Layar Kiosk - Bel Sekolah Budut</title>
+  <link rel="stylesheet" href="/static/css/tailwind.min.css">
+  <style>
+    @keyframes pulse-ring {
+      0% { transform: scale(0.97); opacity: 0.9; }
+      50% { transform: scale(1.03); opacity: 0.5; }
+      100% { transform: scale(0.97); opacity: 0.9; }
+    }
+    .bell-ring-active {
+      animation: pulse-ring 1s infinite;
+    }
+  </style>
+</head>
+<body class="bg-gray-950 text-white min-h-screen flex flex-col font-sans select-none overflow-x-hidden">
+
+  <!-- Top Bar -->
+  <header class="bg-gray-900 border-b border-gray-800 px-6 py-4 flex justify-between items-center">
+    <div class="flex items-center space-x-4">
+      <div class="w-12 h-12 bg-blue-950 text-yellow-400 rounded-xl flex items-center justify-center text-2xl font-bold shadow-inner">
+        🔔
+      </div>
+      <div>
+        <h1 class="text-xl font-extrabold tracking-tight" id="kioskSchoolName">SMK / SMA BUDUT</h1>
+        <p class="text-xs text-gray-400 font-medium">Layar Informasi Jadwal & Bel Sekolah Otomatis</p>
+      </div>
+    </div>
+
+    <div class="flex items-center space-x-4">
+      <!-- Active Group Badge -->
+      <div class="flex items-center space-x-2 bg-gray-800 border border-gray-700 px-4 py-2 rounded-xl">
+        <span class="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse"></span>
+        <span class="text-xs uppercase tracking-wider text-gray-400 font-bold">Grup Aktif:</span>
+        <span class="text-sm font-bold text-yellow-400" id="kioskGroupName">Memuat...</span>
+      </div>
+
+      <!-- Browser Audio Toggle (for standalone kiosk sound) -->
+      <button onclick="toggleKioskAudio()" id="btnKioskAudio" class="p-2.5 rounded-xl bg-gray-800 hover:bg-gray-700 border border-gray-700 transition" title="Aktifkan Bunyi di Layar Ini">
+        <span id="kioskAudioIcon">🔇</span>
+      </button>
+
+      <!-- Exit Fullscreen / Dashboard Link -->
+      <a href="/" class="text-xs bg-blue-900 hover:bg-blue-800 text-white px-3.5 py-2 rounded-xl font-bold transition">
+        Buka Dashboard
+      </a>
+    </div>
+  </header>
+
+  <!-- Live Bell Ring Alert (Fullscreen Banner) -->
+  <div id="kioskRingBanner" class="hidden bg-emerald-600 text-white px-6 py-4 text-center font-bold text-2xl shadow-2xl transition-all">
+    🔔 <span id="kioskRingTitle">BEL SEDANG BERBUNYI!</span>
+  </div>
+
+  <!-- Holiday Mode Notice -->
+  <div id="kioskHolidayBanner" class="hidden bg-red-600 text-white px-6 py-3 text-center font-bold text-base shadow">
+    ⚠️ PERHATIAN: MODE LIBUR AKTIF - Bel Otomatis Dinonaktifkan Hari Ini
+  </div>
+
+  <!-- Main Kiosk Body -->
+  <main class="flex-1 max-w-7xl w-full mx-auto p-6 grid grid-cols-1 lg:grid-cols-12 gap-6 items-stretch">
+
+    <!-- Left Column: Giant Clock & Next Bell Card (7 Cols) -->
+    <div class="lg:col-span-7 flex flex-col justify-between space-y-6">
+
+      <!-- Giant Digital Clock Card -->
+      <div class="bg-gray-900 border border-gray-800 rounded-3xl p-8 flex flex-col items-center justify-center text-center shadow-2xl flex-1">
+        <div class="text-sm uppercase tracking-widest text-gray-400 font-bold mb-2" id="kioskDayName">RABU</div>
+        <div class="text-7xl sm:text-8xl md:text-9xl font-black font-mono tracking-tighter text-blue-400 drop-shadow-md" id="kioskClock">
+          --:--:--
+        </div>
+        <div class="text-lg sm:text-xl font-medium text-gray-300 mt-3" id="kioskDate">
+          Memuat tanggal...
+        </div>
+      </div>
+
+      <!-- Next Bell Countdown Card -->
+      <div class="bg-gradient-to-r from-blue-950 to-indigo-950 border border-blue-800 rounded-3xl p-6 shadow-2xl">
+        <div class="flex items-center justify-between">
+          <span class="text-xs uppercase font-extrabold tracking-widest text-blue-300">HITUNG MUNDUR BEL BERIKUTNYA</span>
+          <span class="text-xs font-mono bg-blue-900 text-blue-200 px-3 py-1 rounded-full font-bold" id="kioskNextTime">Pukul --:--</span>
+        </div>
+        <div class="flex items-baseline space-x-4 mt-3">
+          <div class="text-5xl sm:text-6xl font-extrabold text-emerald-400 font-mono" id="kioskCountdown">
+            --:--
+          </div>
+          <div class="text-xl sm:text-2xl font-bold text-white truncate" id="kioskNextTitle">
+            Menunggu jadwal...
+          </div>
+        </div>
+        <div class="text-xs text-blue-300 mt-2" id="kioskNextNotes"></div>
+      </div>
+
+    </div>
+
+    <!-- Right Column: Today's Full Schedule Table (5 Cols) -->
+    <div class="lg:col-span-5 bg-gray-900 border border-gray-800 rounded-3xl p-6 flex flex-col shadow-2xl">
+      <div class="flex justify-between items-center mb-4 pb-3 border-b border-gray-800">
+        <h3 class="font-extrabold text-base tracking-wide uppercase text-gray-200">Jadwal Bel Hari Ini</h3>
+        <span class="text-xs text-gray-400 font-mono" id="kioskTotalCount">0 Jadwal</span>
+      </div>
+
+      <div class="flex-1 overflow-y-auto space-y-2 pr-1" id="kioskScheduleList">
+        <!-- Dynamically populated items -->
+        <div class="text-center text-gray-500 py-10 text-xs">Memuat daftar jadwal hari ini...</div>
+      </div>
+    </div>
+
+  </main>
+
+  <footer class="bg-gray-950 border-t border-gray-900 px-6 py-3 text-center text-xs text-gray-500">
+    Sistem Bel Budut • Waktu disinkronkan secara real-time dari server
+  </footer>
+
+  <audio id="kioskAudioPlayer" preload="auto"></audio>
+
+  <script>
+    let webAudioEnabled = false;
+    let kioskAudio = document.getElementById('kioskAudioPlayer');
+
+    function toggleKioskAudio() {
+      webAudioEnabled = !webAudioEnabled;
+      document.getElementById('kioskAudioIcon').innerText = webAudioEnabled ? '🔊' : '🔇';
+      if (webAudioEnabled) {
+        kioskAudio.play().then(() => kioskAudio.pause()).catch(() => {});
+      }
+    }
+
+    // Connect to SSE
+    function initKioskSSE() {
+      const evtSource = new EventSource('/api/events');
+
+      evtSource.onmessage = function(e) {
+        try {
+          const data = JSON.parse(e.data);
+          if (data.type === 'TICK') {
+            document.getElementById('kioskClock').innerText = data.server_time;
+            document.getElementById('kioskDate').innerText = data.server_date;
+            document.getElementById('kioskDayName').innerText = data.day_name;
+
+            if (data.active_group) {
+              document.getElementById('kioskGroupName').innerText = data.active_group.name;
+            }
+
+            if (data.holiday_mode) {
+              document.getElementById('kioskHolidayBanner').classList.remove('hidden');
+            } else {
+              document.getElementById('kioskHolidayBanner').classList.add('hidden');
+            }
+
+            if (data.next_bell) {
+              document.getElementById('kioskCountdown').innerText = data.next_bell.countdown_display;
+              document.getElementById('kioskNextTime').innerText = 'Pukul ' + data.next_bell.time;
+              document.getElementById('kioskNextTitle').innerText = data.next_bell.title;
+              document.getElementById('kioskNextNotes').innerText = data.next_bell.notes || '';
+            } else {
+              document.getElementById('kioskCountdown').innerText = 'SELESAI';
+              document.getElementById('kioskNextTime').innerText = '--:--';
+              document.getElementById('kioskNextTitle').innerText = 'Tidak ada bel lagi hari ini';
+              document.getElementById('kioskNextNotes').innerText = '';
+            }
+          } else if (data.type === 'BELL_RING') {
+            // Visual Ring Alert
+            const banner = document.getElementById('kioskRingBanner');
+            document.getElementById('kioskRingTitle').innerText = data.title;
+            banner.classList.remove('hidden');
+            setTimeout(() => banner.classList.add('hidden'), 10000);
+
+            // Play in kiosk browser if audio enabled
+            if (webAudioEnabled && data.audio_url) {
+              kioskAudio.src = data.audio_url;
+              kioskAudio.play().catch(e => console.log('Audio autoplay blocked:', e));
+            }
+
+            loadTodayKioskSchedules();
+          }
+        } catch (err) {
+          console.error(err);
+        }
+      };
+
+      evtSource.onerror = function() {
+        console.warn('Kiosk SSE reconnecting...');
+      };
+    }
+
+    async function loadTodayKioskSchedules() {
+      try {
+        const res = await fetch('/api/schedules');
+        const json = await res.json();
+        if (!json.success) return;
+
+        const container = document.getElementById('kioskScheduleList');
+        const now = new Date();
+        const curHM = String(now.getHours()).padStart(2, '0') + ':' + String(now.getMinutes()).padStart(2, '0');
+
+        container.innerHTML = '';
+        const items = json.data || [];
+        document.getElementById('kioskTotalCount').innerText = items.length + ' Jadwal';
+
+        if (items.length === 0) {
+          container.innerHTML = '<div class="text-center text-gray-500 py-10 text-xs">Belum ada jadwal untuk hari ini.</div>';
+          return;
+        }
+
+        items.forEach(item => {
+          const isPast = item.time < curHM;
+          const isNext = item.time === curHM;
+
+          const div = document.createElement('div');
+          div.className = `p-3.5 rounded-2xl border transition flex items-center justify-between ${
+            isPast 
+              ? 'bg-gray-900 border-gray-800 text-gray-500' 
+              : 'bg-gray-800 border-gray-700 text-gray-100 hover:border-blue-500'
+          }`;
+
+          div.innerHTML = `
+            <div class="flex items-center space-x-3">
+              <span class="font-mono text-base font-extrabold ${isPast ? 'text-gray-500' : 'text-yellow-400'}">${item.time}</span>
+              <div>
+                <div class="font-bold text-sm ${isPast ? 'line-through text-gray-500' : 'text-white'}">${item.title}</div>
+                <div class="text-xs text-gray-400">${item.notes || item.audio_name || item.audio_code}</div>
+              </div>
+            </div>
+            <span class="text-xs font-bold px-2.5 py-1 rounded-full ${
+              isPast ? 'bg-gray-800 text-gray-500' : 'bg-emerald-900 text-emerald-300'
+            }">
+              ${isPast ? 'Lewat' : 'Menunggu'}
+            </span>
+          `;
+          container.appendChild(div);
+        });
+      } catch (err) {
+        console.error(err);
+      }
+    }
+
+    window.addEventListener('DOMContentLoaded', () => {
+      initKioskSSE();
+      loadTodayKioskSchedules();
+      setInterval(loadTodayKioskSchedules, 60000);
+    });
+  </script>
+</body>
+</html>
+

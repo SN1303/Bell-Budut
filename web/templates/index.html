@@ -1,0 +1,1172 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+  <meta http-equiv="Pragma" content="no-cache">
+  <meta http-equiv="Expires" content="0">
+  <title>Sistem Bel Sekolah Otomatis - Bell Budut</title>
+  <link rel="stylesheet" href="/static/css/tailwind.min.css">
+  <style>
+    @keyframes pulse-ring {
+      0% { transform: scale(0.95); opacity: 0.8; }
+      50% { transform: scale(1.05); opacity: 0.4; }
+      100% { transform: scale(0.95); opacity: 0.8; }
+    }
+    .bell-ring-active {
+      animation: pulse-ring 1s infinite;
+    }
+    [x-cloak] { display: none !important; }
+  </style>
+</head>
+<body class="bg-gray-100 text-gray-800 min-h-screen flex flex-col font-sans">
+
+  <!-- Top Navbar -->
+  <header class="bg-blue-900 text-white shadow-md sticky top-0 z-40">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-3 flex flex-wrap justify-between items-center gap-4">
+      <div class="flex items-center space-x-3">
+        <div class="bg-blue-800 p-2 rounded-lg text-yellow-300">
+          <svg class="w-7 h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
+          </svg>
+        </div>
+        <div>
+          <h1 class="text-xl font-bold tracking-tight" id="headerSchoolName">SMK / SMA BUDUT</h1>
+          <p class="text-xs text-blue-200">Sistem Bel Sekolah Otomatis & Terjadwal</p>
+        </div>
+      </div>
+
+      <!-- Quick Status Badges & Actions -->
+      <div class="flex items-center flex-wrap gap-2 text-sm">
+        <!-- Holiday Mode Badge -->
+        <span id="badgeHoliday" class="hidden px-2.5 py-1 rounded-full text-xs font-semibold bg-red-500 text-white animate-pulse">
+          MODE LIBUR AKTIF
+        </span>
+
+        <!-- Global Stop Button (Shown whenever any audio is playing) -->
+        <button id="navbarStopBtn" onclick="stopAllAudio()" class="hidden flex items-center space-x-1.5 px-3 py-1.5 rounded-lg text-xs font-black bg-red-600 hover:bg-red-700 text-white shadow-lg animate-pulse transition">
+          <span>⏹</span>
+          <span>Hentikan Suara</span>
+        </button>
+
+        <!-- Browser Audio Toggle -->
+        <button id="btnWebAudioToggle" onclick="toggleWebAudio()" class="flex items-center space-x-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-blue-800 hover:bg-blue-700 transition">
+          <span id="webAudioIcon">🔇</span>
+          <span id="webAudioText">Suara Browser: Nonaktif</span>
+        </button>
+
+        <!-- Pisahkan Suara Bel vs YouTube / WA Button -->
+        <button onclick="openModal('modalAudioIsolator')" class="flex items-center space-x-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-indigo-700 hover:bg-indigo-600 text-white shadow-2xs transition" title="Atur agar suara YouTube/WA tidak keluar ke speaker sekolah">
+          <span>🎛️</span>
+          <span>Pisahkan Suara (YT/WA)</span>
+        </button>
+
+        <!-- Kiosk Mode Link -->
+        <a href="/kiosk" target="_blank" class="flex items-center space-x-1 px-3 py-1.5 rounded-lg text-xs font-medium bg-blue-700 hover:bg-blue-600 transition" title="Tampilan Layar Penuh untuk Ruang Guru / Lobby">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4" /></svg>
+          <span>Layar Kiosk</span>
+        </a>
+
+        <!-- Admin PIN Status -->
+        <button id="btnAuth" onclick="handleAuthClick()" class="flex items-center space-x-1 px-3 py-1.5 rounded-lg text-xs font-medium bg-yellow-500 hover:bg-yellow-400 text-blue-950 transition font-bold">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" /></svg>
+          <span id="btnAuthText">Masuk Admin</span>
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <!-- Live Banner Alert (Shown when bell is currently ringing) -->
+  <div id="liveBellBanner" class="hidden bg-green-600 text-white px-4 py-3 shadow-lg transition-all sticky top-14 z-30">
+    <div class="max-w-7xl mx-auto flex items-center justify-between">
+      <div class="flex items-center space-x-3">
+        <span class="text-2xl animate-bounce">🔔</span>
+        <div>
+          <div class="font-bold text-lg" id="liveBellTitle">Bel Berbunyi!</div>
+          <div class="text-xs text-green-100" id="liveBellSubtitle">Memutar nada bel di speaker server...</div>
+        </div>
+      </div>
+      <button onclick="stopServerAudio()" class="px-3 py-1.5 bg-green-800 hover:bg-green-900 rounded text-xs font-bold transition">
+        Stop Bunyi Server
+      </button>
+    </div>
+  </div>
+
+  <!-- Holiday Notice Banner -->
+  <div id="holidayBanner" class="hidden bg-red-100 border-l-4 border-red-500 text-red-700 p-4 max-w-7xl mx-auto mt-4 w-full">
+    <div class="flex items-center justify-between">
+      <div class="flex items-center space-x-2">
+        <svg class="w-6 h-6 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg>
+        <p class="text-sm font-semibold">Mode Libur sedang aktif. Seluruh jadwal bel otomatis dinonaktifkan sementara.</p>
+      </div>
+      <button onclick="toggleHolidayMode()" class="text-xs font-bold bg-red-600 hover:bg-red-700 text-white px-3 py-1.5 rounded transition">
+        Matikan Mode Libur
+      </button>
+    </div>
+  </div>
+
+  <!-- Main Container -->
+  <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 flex-1 w-full space-y-6">
+
+    <!-- Top Dashboard Cards Grid -->
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+
+      <!-- Card 1: Live Server Clock -->
+      <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-5 flex flex-col justify-between">
+        <div>
+          <div class="text-xs font-bold uppercase tracking-wider text-gray-500 mb-1">Waktu Server & Jam Saat Ini</div>
+          <div class="text-4xl sm:text-5xl font-extrabold text-blue-900 font-mono tracking-tight" id="liveClock">--:--:--</div>
+          <div class="text-sm text-gray-600 font-medium mt-1" id="liveDate">Memuat tanggal...</div>
+        </div>
+        <div class="mt-4 pt-3 border-t border-gray-100 flex items-center justify-between text-xs text-gray-500">
+          <span class="flex items-center">
+            <span class="w-2.5 h-2.5 rounded-full bg-green-500 inline-block mr-1.5 animate-pulse"></span>
+            Server Terhubung (SSE)
+          </span>
+          <span id="serverSpeakerStatus">Speaker: Aktif</span>
+        </div>
+      </div>
+
+      <!-- Card 2: Active Group Status -->
+      <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-5 flex flex-col justify-between">
+        <div>
+          <div class="flex items-center justify-between mb-1">
+            <span class="text-xs font-bold uppercase tracking-wider text-gray-500">Grup Jadwal Aktif</span>
+            <span id="groupBadge" class="px-2 py-0.5 rounded text-xs font-semibold bg-blue-100 text-blue-800">
+              Manual
+            </span>
+          </div>
+          <h2 class="text-2xl font-bold text-gray-800 mt-1" id="activeGroupName">Memuat grup...</h2>
+          <p class="text-xs text-gray-500 mt-1" id="activeGroupInfo">Status jadwal grup yang berlaku hari ini</p>
+        </div>
+        <div class="mt-4 pt-3 border-t border-gray-100 flex items-center justify-between">
+          <button onclick="switchTab('groups')" class="text-xs font-bold text-blue-700 hover:text-blue-900 transition flex items-center">
+            Ganti / Jadwalkan Rentang Tanggal &rarr;
+          </button>
+        </div>
+      </div>
+
+      <!-- Card 3: Next Bell Countdown -->
+      <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-5 flex flex-col justify-between relative overflow-hidden">
+        <div>
+          <div class="text-xs font-bold uppercase tracking-wider text-gray-500 mb-1">Bel Berikutnya Hari Ini</div>
+          <div class="flex items-baseline space-x-2">
+            <span class="text-3xl sm:text-4xl font-extrabold text-green-600 font-mono" id="nextBellCountdown">--:--</span>
+            <span class="text-xs text-gray-500 font-medium" id="nextBellTimeLabel">(Pukul --:--)</span>
+          </div>
+          <h3 class="text-lg font-bold text-gray-800 mt-1 truncate" id="nextBellTitle">Tidak ada bel lagi hari ini</h3>
+          <p class="text-xs text-gray-500" id="nextBellAudioCode">Kode Audio: -</p>
+        </div>
+        <div class="mt-3 pt-2 border-t border-gray-100 flex items-center justify-between text-xs">
+          <span class="text-gray-500" id="nextBellNotes">Semua jam bel selesai</span>
+          <button onclick="switchTab('schedules')" class="text-blue-700 hover:underline font-medium">Lihat Semua</button>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- Quick Emergency & Manual Controls Bar -->
+    <div class="bg-gradient-to-r from-blue-900 to-indigo-900 rounded-xl p-4 shadow-sm text-white flex flex-wrap items-center justify-between gap-4">
+      <div class="flex items-center space-x-3">
+        <span class="text-2xl">⚡</span>
+        <div>
+          <div class="font-bold text-sm">Aksi Cepat & Bel Darurat</div>
+          <div class="text-xs text-blue-200">Bunyikan nada bel seketika atau sirine evakuasi tanpa menunggu jam jadwal</div>
+        </div>
+      </div>
+
+      <div class="flex items-center flex-wrap gap-2">
+        <button onclick="triggerQuickBell('AUD-05', 'Bel 1x Tit')" class="px-3 py-1.5 bg-blue-800 hover:bg-blue-700 text-white rounded-lg text-xs font-semibold shadow transition">
+          🔔 1x Tit (Bip)
+        </button>
+        <button onclick="triggerQuickBell('AUD-02', 'Bel 2 Nada (Ding-Dong)')" class="px-3 py-1.5 bg-blue-800 hover:bg-blue-700 text-white rounded-lg text-xs font-semibold shadow transition">
+          🔔 2 Nada (Ding-Dong)
+        </button>
+        <button onclick="triggerQuickBell('AUD-01', 'Bel 3 Nada (Do-Mi-Sol)')" class="px-3 py-1.5 bg-blue-800 hover:bg-blue-700 text-white rounded-lg text-xs font-semibold shadow transition">
+          🔔 3 Nada (Istirahat)
+        </button>
+        <button onclick="triggerQuickBell('AUD-03', 'Bel Westminster 4 Nada')" class="px-3 py-1.5 bg-blue-800 hover:bg-blue-700 text-white rounded-lg text-xs font-semibold shadow transition">
+          🔔 Bel Masuk / Pulang
+        </button>
+        <button onclick="openEmergencyModal()" class="px-3.5 py-1.5 bg-red-600 hover:bg-red-500 text-white rounded-lg text-xs font-bold shadow flex items-center space-x-1 animate-pulse">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg>
+          <span>SIRINE DARURAT</span>
+        </button>
+      </div>
+    </div>
+
+    <!-- Navigation Tabs -->
+    <div class="border-b border-gray-200">
+      <nav class="flex space-x-2 sm:space-x-6 overflow-x-auto text-sm font-semibold" aria-label="Tabs">
+        <button onclick="switchTab('schedules')" id="tabBtn-schedules" class="tab-btn py-3 px-1 border-b-2 border-blue-900 text-blue-900 whitespace-nowrap">
+          📅 Jadwal Bel
+        </button>
+        <button onclick="switchTab('groups')" id="tabBtn-groups" class="tab-btn py-3 px-1 border-b-2 border-transparent text-gray-500 hover:text-gray-700 whitespace-nowrap">
+          🏷️ Grup Jadwal & Rentang
+        </button>
+        <button onclick="switchTab('audio')" id="tabBtn-audio" class="tab-btn py-3 px-1 border-b-2 border-transparent text-gray-500 hover:text-gray-700 whitespace-nowrap">
+          🎵 Manajemen Audio & Kode
+        </button>
+        <button onclick="switchTab('excel')" id="tabBtn-excel" class="tab-btn py-3 px-1 border-b-2 border-transparent text-gray-500 hover:text-gray-700 whitespace-nowrap">
+          📊 Excel (Import / Export)
+        </button>
+        <button onclick="switchTab('backup')" id="tabBtn-backup" class="tab-btn py-3 px-1 border-b-2 border-transparent text-gray-500 hover:text-gray-700 whitespace-nowrap">
+          💾 Backup & Riwayat
+        </button>
+        <button onclick="switchTab('settings')" id="tabBtn-settings" class="tab-btn py-3 px-1 border-b-2 border-transparent text-gray-500 hover:text-gray-700 whitespace-nowrap">
+          ⚙️ Pengaturan
+        </button>
+      </nav>
+    </div>
+
+    <!-- TAB 1: SCHEDULES -->
+    <section id="tabContent-schedules" class="tab-content space-y-4">
+      <!-- Top Control Bar -->
+      <div class="bg-white p-5 rounded-2xl shadow-sm border border-gray-200 space-y-4">
+        
+        <!-- Row 1: Group Selector, Live Search, and Add Button -->
+        <div class="flex flex-wrap items-center justify-between gap-4">
+          <div class="flex items-center flex-wrap gap-3">
+            <div class="flex items-center space-x-2">
+              <span class="text-xs font-bold uppercase tracking-wider text-gray-500">Grup:</span>
+              <select id="scheduleFilterGroup" onchange="loadSchedules()" class="text-sm font-bold border-gray-300 rounded-xl px-3 py-2 bg-blue-50/50 border text-blue-900 shadow-sm focus:ring-blue-500 focus:border-blue-500">
+                <!-- Dynamically populated -->
+              </select>
+            </div>
+
+            <!-- Instant Live Search Bar -->
+            <div class="relative">
+              <span class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-gray-400">
+                🔍
+              </span>
+              <input type="text" id="scheduleSearchInput" oninput="filterScheduleTable()" placeholder="Cari jam, kegiatan, atau nada..." class="pl-9 pr-4 py-2 border border-gray-300 rounded-xl text-xs bg-gray-50 focus:bg-white focus:ring-blue-500 focus:border-blue-500 w-56 sm:w-72 transition">
+            </div>
+          </div>
+
+          <div class="flex items-center space-x-2">
+            <button onclick="openWeeklyMatrixModal()" class="px-3.5 py-2 bg-green-700 hover:bg-green-600 text-white rounded-xl text-xs font-bold shadow transition flex items-center space-x-1.5">
+              <span>📅 Matriks Mingguan</span>
+            </button>
+            <button onclick="openScheduleModal()" class="px-4 py-2 bg-blue-900 hover:bg-blue-800 text-white rounded-xl text-xs font-bold shadow transition flex items-center space-x-1.5">
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg>
+              <span>Tambah Jadwal</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- Row 2: Prominent Day Selector Tabs (Clean & Linear) -->
+        <div class="pt-3 border-t border-gray-100 flex items-center justify-between flex-wrap gap-3">
+          <div class="flex items-center flex-wrap gap-1.5 text-xs">
+            <span class="font-bold text-gray-500 mr-1.5 hidden sm:inline">Pilih Hari:</span>
+            <button onclick="setDayFilter('TODAY')" id="dayPill-TODAY" class="day-pill px-3.5 py-2 rounded-xl font-extrabold bg-blue-900 text-white shadow transition flex items-center space-x-1.5">
+              <span>⭐ Hari Ini</span>
+              <span id="pillTodayName" class="bg-blue-800 px-1.5 py-0.5 rounded text-[11px] text-yellow-300"></span>
+            </button>
+            <button onclick="setDayFilter('SENIN')" id="dayPill-SENIN" class="day-pill px-3 py-2 rounded-xl font-bold bg-gray-100 hover:bg-gray-200 text-gray-700 transition">
+              Senin
+            </button>
+            <button onclick="setDayFilter('SELASA')" id="dayPill-SELASA" class="day-pill px-3 py-2 rounded-xl font-bold bg-gray-100 hover:bg-gray-200 text-gray-700 transition">
+              Selasa
+            </button>
+            <button onclick="setDayFilter('RABU')" id="dayPill-RABU" class="day-pill px-3 py-2 rounded-xl font-bold bg-gray-100 hover:bg-gray-200 text-gray-700 transition">
+              Rabu
+            </button>
+            <button onclick="setDayFilter('KAMIS')" id="dayPill-KAMIS" class="day-pill px-3 py-2 rounded-xl font-bold bg-gray-100 hover:bg-gray-200 text-gray-700 transition">
+              Kamis
+            </button>
+            <button onclick="setDayFilter('JUMAT')" id="dayPill-JUMAT" class="day-pill px-3 py-2 rounded-xl font-bold bg-gray-100 hover:bg-gray-200 text-gray-700 transition">
+              Jumat
+            </button>
+            <button onclick="setDayFilter('SABTU')" id="dayPill-SABTU" class="day-pill px-3 py-2 rounded-xl font-bold bg-gray-100 hover:bg-gray-200 text-gray-700 transition">
+              Sabtu
+            </button>
+            <button onclick="setDayFilter('ALL')" id="dayPill-ALL" class="day-pill px-3 py-2 rounded-xl font-bold bg-gray-100 hover:bg-gray-200 text-gray-700 transition">
+              📋 Ringkasan Master (Semua)
+            </button>
+          </div>
+
+          <div class="text-xs text-gray-500 font-semibold" id="scheduleTableStats">
+            Menampilkan jadwal...
+          </div>
+        </div>
+
+      </div>
+
+      <!-- Schedule Table with Column Filters -->
+      <div class="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden">
+        <div class="overflow-x-auto">
+          <table class="min-w-full divide-y divide-gray-200 text-sm" id="mainScheduleTable">
+            <thead class="bg-gray-50 text-gray-700 text-xs font-bold uppercase tracking-wider">
+              <!-- Baris Judul Kolom -->
+              <tr class="border-b border-gray-200">
+                <th class="py-3 px-3 text-left w-28">
+                  <div class="flex items-center space-x-1 cursor-pointer select-none group" onclick="toggleTimeSort()" title="Klik untuk urutkan jam">
+                    <span>Waktu</span>
+                    <span id="sortTimeIcon" class="text-blue-900 font-extrabold text-xs">▲</span>
+                  </div>
+                </th>
+                <th class="py-3 px-3 text-left w-52">Hari Berlaku</th>
+                <th class="py-3 px-3 text-left">Nama Bel / Kegiatan</th>
+                <th class="py-3 px-3 text-left w-64">Nada Audio</th>
+                <th class="py-3 px-3 text-center w-28">Status</th>
+                <th class="py-3 px-3 text-right w-24">Aksi</th>
+              </tr>
+              <!-- Baris Filter Kolom Interaktif (Langsung di Header Kolom) -->
+              <tr class="bg-blue-50/50 border-b border-gray-200 text-[11px] font-semibold text-gray-600 normal-case">
+                <!-- Filter Waktu -->
+                <th class="p-2">
+                  <select id="colFilterTime" onchange="applyColumnFilters()" class="w-full text-xs py-1.5 px-1.5 bg-white border border-gray-300 rounded-lg shadow-xs focus:ring-1 focus:ring-blue-500 font-medium">
+                    <option value="ALL">Semua Jam</option>
+                    <option value="PAGI">Pagi (&lt; 10:00)</option>
+                    <option value="SIANG">Siang (10:00-13:00)</option>
+                    <option value="SORE">Sore (&ge; 13:00)</option>
+                  </select>
+                </th>
+                <!-- Filter Hari Berlaku -->
+                <th class="p-2">
+                  <select id="colFilterDay" onchange="onColFilterDayChange(this.value)" class="w-full text-xs py-1.5 px-1.5 bg-white border border-blue-400 rounded-lg shadow-xs focus:ring-1 focus:ring-blue-500 font-bold text-blue-900">
+                    <option value="TODAY">⭐ Hari Ini</option>
+                    <option value="SENIN">Senin (Upacara)</option>
+                    <option value="SELASA">Selasa</option>
+                    <option value="RABU">Rabu</option>
+                    <option value="KAMIS">Kamis (Pulang 14:15)</option>
+                    <option value="JUMAT">Jumat (Shalat Jumat)</option>
+                    <option value="SABTU">Sabtu</option>
+                    <option value="ALL">📋 Ringkasan Master</option>
+                  </select>
+                </th>
+                <!-- Filter Nama Bel / Kegiatan -->
+                <th class="p-2">
+                  <div class="relative">
+                    <input type="text" id="colFilterTitle" oninput="applyColumnFilters()" placeholder="Filter kegiatan..." class="w-full text-xs py-1.5 pl-6 pr-2 bg-white border border-gray-300 rounded-lg focus:ring-1 focus:ring-blue-500 font-normal">
+                    <span class="absolute left-2 top-2 text-gray-400 text-[11px]">🔍</span>
+                  </div>
+                </th>
+                <!-- Filter Nada Audio -->
+                <th class="p-2">
+                  <select id="colFilterAudio" onchange="applyColumnFilters()" class="w-full text-xs py-1.5 px-1.5 bg-white border border-gray-300 rounded-lg shadow-xs focus:ring-1 focus:ring-blue-500 font-medium truncate">
+                    <option value="ALL">Semua Nada Audio</option>
+                  </select>
+                </th>
+                <!-- Filter Status -->
+                <th class="p-2 text-center">
+                  <select id="colFilterStatus" onchange="applyColumnFilters()" class="w-full text-xs py-1.5 px-1 bg-white border border-gray-300 rounded-lg shadow-xs focus:ring-1 focus:ring-blue-500 font-medium text-center">
+                    <option value="ALL">Semua</option>
+                    <option value="1">✓ Aktif</option>
+                    <option value="0">Nonaktif</option>
+                  </select>
+                </th>
+                <!-- Reset Filter -->
+                <th class="p-2 text-right">
+                  <button onclick="resetAllScheduleFilters()" title="Bersihkan semua filter kolom" class="w-full py-1.5 px-2 bg-gray-200 hover:bg-gray-300 text-gray-700 rounded-lg text-xs font-bold transition flex items-center justify-center space-x-1">
+                    <span>↺</span>
+                    <span>Reset</span>
+                  </button>
+                </th>
+              </tr>
+            </thead>
+            <tbody id="scheduleTableBody" class="divide-y divide-gray-100 font-normal">
+              <!-- Dynamically populated -->
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <!-- TAB 2: GROUPS & DATE RANGES -->
+    <section id="tabContent-groups" class="tab-content hidden space-y-4">
+      <div class="flex justify-between items-center bg-white p-4 rounded-xl shadow-sm border border-gray-200">
+        <div>
+          <h3 class="text-base font-bold text-gray-800">Daftar Grup Jadwal</h3>
+          <p class="text-xs text-gray-500">Grup jadwal memungkinkan perpindahan jam bel (misal: Reguler, Ujian, Ramadhan) secara manual atau otomatis via rentang tanggal.</p>
+        </div>
+        <button onclick="openGroupModal()" class="px-4 py-2 bg-blue-900 hover:bg-blue-800 text-white rounded-lg text-sm font-semibold shadow transition">
+          + Buat Grup Baru
+        </button>
+      </div>
+
+      <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4" id="groupsList">
+        <!-- Dynamically populated cards -->
+      </div>
+    </section>
+
+    <!-- TAB 3: AUDIO MANAGER & CODES -->
+    <section id="tabContent-audio" class="tab-content hidden space-y-4">
+      <div class="bg-white p-4 rounded-xl shadow-sm border border-gray-200 flex flex-wrap justify-between items-center gap-4">
+        <div>
+          <h3 class="text-base font-bold text-gray-800">Pustaka Audio & Kode Nada</h3>
+          <p class="text-xs text-gray-500">Setiap file audio otomatis diberikan Kode Unik (AUD-XX) yang dipakai saat pembuatan jadwal & import Excel.</p>
+        </div>
+        <button onclick="openAudioUploadModal()" class="px-4 py-2 bg-green-700 hover:bg-green-600 text-white rounded-lg text-sm font-semibold shadow transition flex items-center space-x-1.5 cursor-pointer">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"/></svg>
+          <span>+ Upload Nada / Lagu (Bisa Banyak Sekaligus)</span>
+        </button>
+      </div>
+
+      <div class="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+        <div class="overflow-x-auto">
+          <table class="min-w-full divide-y divide-gray-200 text-sm">
+            <thead class="bg-gray-50 text-gray-600 uppercase text-xs font-semibold">
+              <tr>
+                <th class="py-3 px-4 text-left">Kode Audio</th>
+                <th class="py-3 px-4 text-left">Nama Nada</th>
+                <th class="py-3 px-4 text-left">Nama File</th>
+                <th class="py-3 px-4 text-left">Keterangan</th>
+                <th class="py-3 px-4 text-center">Test Suara Browser</th>
+                <th class="py-3 px-4 text-center">Test Bunyi Server</th>
+                <th class="py-3 px-4 text-right">Aksi</th>
+              </tr>
+            </thead>
+            <tbody id="audioTableBody" class="divide-y divide-gray-100">
+              <!-- Dynamically populated -->
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <!-- TAB 4: EXCEL (IMPORT / EXPORT) -->
+    <section id="tabContent-excel" class="tab-content hidden space-y-6">
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+
+        <!-- Step 1: Download Template -->
+        <div class="bg-white rounded-xl p-5 shadow-sm border border-gray-200 flex flex-col justify-between">
+          <div>
+            <div class="w-10 h-10 rounded-lg bg-blue-100 text-blue-900 flex items-center justify-center font-bold text-lg mb-3">1</div>
+            <h4 class="font-bold text-gray-800 text-base">Unduh Template Excel</h4>
+            <p class="text-xs text-gray-500 mt-2 leading-relaxed">
+              Template pintar <code>.xlsx</code> dengan <b>dropdown Nama Audio</b> otomatis. Anda cukup memilih nama lagunya, kode audio terisi sendiri otomatis via rumus Excel!
+            </p>
+            <div class="mt-3">
+              <label class="block text-[11px] font-bold text-gray-700 mb-1">Pilih Judul Grup (Opsional):</label>
+              <select id="templateTargetGroupSelect" class="w-full text-xs border border-gray-300 rounded-lg p-2 bg-gray-50 text-gray-800">
+                <option value="">(Umum / Bel Reguler)</option>
+              </select>
+            </div>
+          </div>
+          <div class="mt-4 pt-4 border-t border-gray-100">
+            <button onclick="downloadTemplateExcel()" class="w-full text-center px-4 py-2.5 bg-blue-900 hover:bg-blue-800 text-white rounded-lg text-xs font-bold shadow transition flex items-center justify-center space-x-1.5 cursor-pointer">
+              <span>📥</span>
+              <span>Unduh Template Pintar (.xlsx)</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- Step 2: Export Existing Data -->
+        <div class="bg-white rounded-xl p-5 shadow-sm border border-gray-200 flex flex-col justify-between">
+          <div>
+            <div class="w-10 h-10 rounded-lg bg-green-100 text-green-800 flex items-center justify-center font-bold text-lg mb-3">2</div>
+            <h4 class="font-bold text-gray-800 text-base">Ekspor Jadwal per Grup</h4>
+            <p class="text-xs text-gray-500 mt-2 leading-relaxed">
+              Unduh jadwal yang tersimpan saat ini ke format Excel. Anda dapat memilih mengekspor <b>satu grup saja</b> atau semua grup sekaligus.
+            </p>
+            <div class="mt-3">
+              <label class="block text-[11px] font-bold text-gray-700 mb-1">Pilih Grup yang Diekspor:</label>
+              <select id="exportGroupSelect" class="w-full text-xs border border-gray-300 rounded-lg p-2 bg-gray-50 text-gray-800">
+                <option value="all">Semua Grup Sekaligus (Gabungan)</option>
+              </select>
+            </div>
+          </div>
+          <div class="mt-4 pt-4 border-t border-gray-100">
+            <button onclick="exportSchedulesExcel()" class="w-full text-center px-4 py-2.5 bg-green-700 hover:bg-green-600 text-white rounded-lg text-xs font-bold shadow transition flex items-center justify-center space-x-1.5 cursor-pointer">
+              <span>📊</span>
+              <span>Ekspor Jadwal ke Excel</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- Step 3: Import Excel -->
+        <div class="bg-white rounded-xl p-5 shadow-sm border border-gray-200 flex flex-col justify-between">
+          <div>
+            <div class="w-10 h-10 rounded-lg bg-indigo-100 text-indigo-800 flex items-center justify-center font-bold text-lg mb-3">3</div>
+            <h4 class="font-bold text-gray-800 text-base">Import Jadwal dari Excel</h4>
+            <p class="text-xs text-gray-500 mt-2 leading-relaxed">
+              Unggah file Excel yang sudah diisi. Anda bisa memilih untuk <b>memperbarui grup yang sudah ada</b> atau <b>membuat grup baru</b> secara otomatis.
+            </p>
+            <div class="mt-3 bg-indigo-50/70 p-2.5 rounded-lg border border-indigo-100 text-[11px] text-indigo-900">
+              💡 <b>Lebih Mudah:</b> Cukup pilih nama lagu di Excel, sistem otomatis membaca kodenya.
+            </div>
+          </div>
+          <div class="mt-4 pt-4 border-t border-gray-100">
+            <button onclick="openExcelImportModal()" class="w-full text-center px-4 py-2.5 bg-indigo-700 hover:bg-indigo-600 text-white rounded-lg text-xs font-bold shadow transition flex items-center justify-center space-x-1.5 cursor-pointer">
+              <span>📤</span>
+              <span>Buka Menu Import Jadwal</span>
+            </button>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- Info Box on Excel Format -->
+      <div class="bg-blue-50 border border-blue-200 rounded-xl p-4 text-xs text-blue-900 leading-relaxed space-y-1.5">
+        <div class="font-bold text-sm flex items-center space-x-1.5">
+          <span>💡</span>
+          <span>Panduan Pengisian Excel Pintar:</span>
+        </div>
+        <p>• <b>Tidak Perlu Menghafal Kode Audio:</b> Di Excel, cukup klik kolom <i>'Pilih Nada / Lagu Audio'</i>, lalu klik panah dropdown untuk memilih nama lagunya. Kolom <i>'Kode Audio'</i> akan terisi sendiri otomatis via rumus VLOOKUP.</p>
+        <p>• <b>Selalu Update Otomatis:</b> Setiap kali Anda mengunggah lagu baru di tab <i>Audio</i>, template Excel yang diunduh akan otomatis menyertakan lagu baru tersebut di sheet referensi dan dropdown.</p>
+        <p>• <b>Format Waktu:</b> Gunakan format 24 jam JJ:MM (contoh: <code>06:55</code>, <code>07:00</code>, <code>12:30</code>, <code>15:30</code>).</p>
+        <p>• <b>Hari Berlaku:</b> Dapat dipilih: <code>SEMUA</code>, <code>SENIN - JUMAT</code>, <code>SENIN</code>, <code>SELASA</code>, <code>RABU</code>, <code>KAMIS</code>, <code>JUMAT</code>, atau <code>SABTU</code>.</p>
+      </div>
+    </section>
+
+    <!-- TAB 5: BACKUP & LOGS -->
+    <section id="tabContent-backup" class="tab-content hidden space-y-6">
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+
+        <!-- Card Backup Database -->
+        <div class="bg-white p-5 rounded-xl shadow-sm border border-gray-200 space-y-3">
+          <h4 class="font-bold text-gray-800 text-base">Cadangkan Database (Backup)</h4>
+          <p class="text-xs text-gray-500 leading-relaxed">
+            Download salinan file SQLite (<code>bell.db</code>) yang memuat semua data grup, jadwal bel, konfigurasi audio, dan riwayat. Simpan di flashdisk atau Google Drive untuk keamanan.
+          </p>
+          <div class="pt-2">
+            <button onclick="downloadBackup()" class="px-4 py-2 bg-blue-900 hover:bg-blue-800 text-white rounded-lg text-sm font-semibold transition">
+              💾 Download Backup (.db)
+            </button>
+          </div>
+        </div>
+
+        <!-- Card Restore Database -->
+        <div class="bg-white p-5 rounded-xl shadow-sm border border-gray-200 space-y-3">
+          <h4 class="font-bold text-gray-800 text-base">Pulihkan Database (Restore)</h4>
+          <p class="text-xs text-gray-500 leading-relaxed">
+            Pulihkan data bel dari file cadangan sebelumnya. File database saat ini akan otomatis di-backup terlebih dahulu sebelum ditimpa demi keamanan.
+          </p>
+          <div class="pt-2">
+            <button onclick="openRestoreModal()" class="px-4 py-2 bg-red-700 hover:bg-red-600 text-white rounded-lg text-sm font-semibold transition">
+              🔄 Pulihkan Database
+            </button>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- Live Bell Trigger History Table -->
+      <div class="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+        <div class="p-4 border-b border-gray-200 flex justify-between items-center">
+          <h4 class="font-bold text-gray-800 text-sm">Riwayat Bunyi Bel Terakhir</h4>
+          <button onclick="loadLogs()" class="text-xs font-semibold text-blue-700 hover:underline">Segarkan Riwayat</button>
+        </div>
+        <div class="overflow-x-auto max-h-96">
+          <table class="min-w-full divide-y divide-gray-200 text-xs">
+            <thead class="bg-gray-50 text-gray-600 uppercase font-semibold">
+              <tr>
+                <th class="py-2.5 px-3 text-left">Waktu Kejadian</th>
+                <th class="py-2.5 px-3 text-left">Nama Bel / Kegiatan</th>
+                <th class="py-2.5 px-3 text-left">Grup</th>
+                <th class="py-2.5 px-3 text-left">Kode Audio</th>
+                <th class="py-2.5 px-3 text-left">Jenis Pemicu</th>
+                <th class="py-2.5 px-3 text-center">Status</th>
+              </tr>
+            </thead>
+            <tbody id="logsTableBody" class="divide-y divide-gray-100">
+              <!-- Dynamically populated -->
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <!-- TAB 6: SETTINGS -->
+    <section id="tabContent-settings" class="tab-content hidden space-y-6">
+      <div class="bg-white p-6 rounded-xl shadow-sm border border-gray-200 max-w-2xl space-y-6">
+        <h3 class="text-lg font-bold text-gray-800">Pengaturan Sistem</h3>
+
+        <!-- School Name -->
+        <div>
+          <label class="block text-xs font-bold text-gray-700 mb-1">Nama Sekolah / Instansi:</label>
+          <input type="text" id="settingSchoolName" class="w-full border-gray-300 rounded-lg p-2.5 text-sm bg-gray-50 focus:ring-blue-500 focus:border-blue-500">
+        </div>
+
+        <!-- Server Audio Toggle -->
+        <div class="flex items-center justify-between p-3 bg-gray-50 rounded-lg border border-gray-200">
+          <div>
+            <div class="text-sm font-bold text-gray-800">Putar Audio di Speaker Server Langsung</div>
+            <div class="text-xs text-gray-500">Bunyikan nada melalui kabel audio amplifier/soundcard komputer server</div>
+          </div>
+          <input type="checkbox" id="settingServerAudio" class="w-5 h-5 text-blue-600 rounded">
+        </div>
+
+        <!-- Windows Auto-Start Toggle -->
+        <div class="flex items-center justify-between p-3 bg-blue-50 rounded-lg border border-blue-200">
+          <div>
+            <div class="text-sm font-bold text-blue-900 flex items-center space-x-1.5">
+              <span>🚀</span>
+              <span>Jalankan Otomatis saat Komputer Dinyalakan (Auto-Start Windows)</span>
+            </div>
+            <div class="text-xs text-blue-700">Aplikasi bel sekolah langsung aktif di latar belakang (background) begitu komputer dinyalakan tanpa perlu klik manual</div>
+          </div>
+          <input type="checkbox" id="settingAutoStart" onchange="toggleAutoStart(this.checked)" class="w-5 h-5 text-blue-600 rounded">
+        </div>
+
+        <!-- Holiday Mode Toggle -->
+        <div class="flex items-center justify-between p-3 bg-gray-50 rounded-lg border border-gray-200">
+          <div>
+            <div class="text-sm font-bold text-gray-800">Mode Libur (Nonaktifkan Bel Otomatis)</div>
+            <div class="text-xs text-gray-500">Cocok diaktifkan saat libur semester atau hari besar tanpa mengubah jadwal</div>
+          </div>
+          <input type="checkbox" id="settingHolidayMode" class="w-5 h-5 text-red-600 rounded">
+        </div>
+
+        <div class="pt-2">
+          <button onclick="saveSettings()" class="px-5 py-2.5 bg-blue-900 hover:bg-blue-800 text-white rounded-lg text-sm font-semibold transition">
+            Simpan Pengaturan
+          </button>
+        </div>
+
+        <hr class="border-gray-200 my-6">
+
+        <!-- Audio Isolation & Windows Sound Settings Card -->
+        <div class="p-5 bg-indigo-50/70 rounded-xl border border-indigo-200 space-y-4">
+          <div class="flex items-start justify-between flex-wrap gap-3">
+            <div>
+              <div class="text-sm font-bold text-indigo-950 flex items-center space-x-2">
+                <span>🎛️</span>
+                <span>Pemisahan Jalur Suara (Isolasi Bel vs YouTube / WA / Game)</span>
+              </div>
+              <p class="text-xs text-indigo-800 mt-1 leading-relaxed">
+                Atur agar suara video YouTube, musik meja, atau notifikasi WA hanya keluar di headphone/laptop operator dan <b>tidak bocor ke speaker sekolah</b>.
+              </p>
+            </div>
+            <button onclick="openModal('modalAudioIsolator')" class="px-3.5 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-xs font-bold shadow transition flex-shrink-0">
+              Buka Panduan & Alat
+            </button>
+          </div>
+
+          <!-- Quick Action Buttons -->
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+            <button onclick="openWindowsVolumeMixer()" class="p-3 bg-white hover:bg-indigo-100/50 rounded-xl border border-indigo-200 text-left transition flex items-center space-x-3 shadow-2xs group cursor-pointer">
+              <span class="text-2xl group-hover:scale-110 transition">🎚️</span>
+              <div>
+                <div class="text-xs font-bold text-indigo-950">Buka Pengatur Suara Windows</div>
+                <div class="text-[11px] text-gray-500">Pilih speaker Chrome / WA / Bel</div>
+              </div>
+            </button>
+            <button onclick="openWindowsSndvol()" class="p-3 bg-white hover:bg-indigo-100/50 rounded-xl border border-indigo-200 text-left transition flex items-center space-x-3 shadow-2xs group cursor-pointer">
+              <span class="text-2xl group-hover:scale-110 transition">🎛️</span>
+              <div>
+                <div class="text-xs font-bold text-indigo-950">Volume Mixer Klasik</div>
+                <div class="text-[11px] text-gray-500">Atur volume masing-masing aplikasi</div>
+              </div>
+            </button>
+          </div>
+
+          <!-- Mute Windows System Notification Sounds -->
+          <div class="flex items-center justify-between p-3 bg-white rounded-xl border border-indigo-200">
+            <div class="pr-3">
+              <div class="text-xs font-bold text-gray-800 flex items-center space-x-1.5">
+                <span>🔇</span>
+                <span>Bisukan Suara Notifikasi Windows ("Ting!", Error, Colok USB)</span>
+              </div>
+              <div class="text-[11px] text-gray-500 mt-0.5">Mencegah komputer berbunyi tiba-tiba ke speaker sekolah saat ada peringatan sistem Windows</div>
+            </div>
+            <input type="checkbox" id="settingMuteWinSounds" onchange="toggleWindowsSoundsMute(this.checked)" class="w-5 h-5 text-indigo-600 rounded flex-shrink-0 cursor-pointer">
+          </div>
+        </div>
+
+        <hr class="border-gray-200 my-6">
+
+        <!-- PIN Admin Management -->
+        <div class="space-y-4">
+          <h4 class="text-sm font-bold text-gray-800">Ubah PIN Keamanan Admin</h4>
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div>
+              <label class="block text-xs font-semibold text-gray-600 mb-1">PIN Lama:</label>
+              <input type="password" id="inputOldPIN" placeholder="PIN saat ini" class="w-full border-gray-300 rounded-lg p-2.5 text-sm bg-gray-50">
+            </div>
+            <div>
+              <label class="block text-xs font-semibold text-gray-600 mb-1">PIN Baru (min. 4 angka):</label>
+              <input type="password" id="inputNewPIN" placeholder="PIN baru" class="w-full border-gray-300 rounded-lg p-2.5 text-sm bg-gray-50">
+            </div>
+          </div>
+          <button onclick="submitChangePIN()" class="px-4 py-2 bg-yellow-500 hover:bg-yellow-400 text-blue-950 font-bold rounded-lg text-xs transition">
+            Ubah PIN Admin
+          </button>
+        </div>
+
+      </div>
+    </section>
+
+  </main>
+
+  <!-- Footer -->
+  <footer class="bg-white border-t border-gray-200 text-xs text-gray-500 py-4 mt-8">
+    <div class="max-w-7xl mx-auto px-4 flex flex-wrap justify-between items-center gap-2">
+      <div>Sistem Bel Sekolah Otomatis • Powered by Golang & Tailwind CSS</div>
+      <div>Single-Binary Portabel • Budut Edition</div>
+    </div>
+  </footer>
+
+  <!-- ==================== MODALS ==================== -->
+
+  <!-- 1. PIN Admin Modal -->
+  <div id="modalPIN" class="hidden fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
+    <div class="bg-white rounded-2xl max-w-sm w-full p-6 shadow-2xl space-y-4">
+      <div class="text-center">
+        <div class="w-12 h-12 bg-blue-100 text-blue-900 rounded-full flex items-center justify-center mx-auto mb-2 text-xl">🔒</div>
+        <h3 class="text-lg font-bold text-gray-800">Masukkan PIN Admin</h3>
+        <p class="text-xs text-gray-500 mt-1">Aksi perubahan jadwal, grup, dan pengaturan dilindungi oleh PIN keamanan.</p>
+      </div>
+      <div>
+        <input type="password" id="modalInputPIN" placeholder="PIN (Default: 1234)" autofocus class="w-full text-center text-2xl tracking-widest border border-gray-300 rounded-xl p-3 focus:ring-blue-500 focus:border-blue-500">
+        <div id="pinErrorMessage" class="text-xs text-red-600 mt-1 text-center hidden">PIN salah, silakan coba lagi.</div>
+      </div>
+      <div class="flex space-x-2">
+        <button onclick="closeModal('modalPIN')" class="w-1/2 py-2 bg-gray-100 hover:bg-gray-200 rounded-lg text-sm font-semibold text-gray-700 transition">Batal</button>
+        <button onclick="submitVerifyPIN()" class="w-1/2 py-2 bg-blue-900 hover:bg-blue-800 rounded-lg text-sm font-semibold text-white transition">Masuk</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 2. Add/Edit Schedule Modal -->
+  <div id="modalSchedule" class="hidden fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
+    <div class="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-4">
+      <h3 class="text-lg font-bold text-gray-800" id="scheduleModalTitle">Tambah Jadwal Bel</h3>
+      <input type="hidden" id="formScheduleID">
+
+      <div class="space-y-3 text-xs">
+        <div>
+          <label class="block font-semibold text-gray-700 mb-1">Grup Jadwal:</label>
+          <select id="formScheduleGroup" class="w-full border-gray-300 rounded-lg p-2.5 text-sm bg-gray-50"></select>
+        </div>
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="block font-semibold text-gray-700 mb-1">Hari Berlaku:</label>
+            <select id="formScheduleDay" class="w-full border-gray-300 rounded-lg p-2.5 text-sm bg-gray-50 font-semibold">
+              <option value="SENIN - JUMAT">Senin s/d Jumat (Hari Kerja)</option>
+              <option value="SENIN - KAMIS">Senin s/d Kamis</option>
+              <option value="SEMUA">Semua Hari (Senin - Minggu)</option>
+              <option value="SENIN">Senin Saja</option>
+              <option value="SELASA">Selasa Saja</option>
+              <option value="RABU">Rabu Saja</option>
+              <option value="KAMIS">Kamis Saja</option>
+              <option value="JUMAT">Jumat Saja</option>
+              <option value="SABTU">Sabtu Saja</option>
+            </select>
+          </div>
+          <div>
+            <label class="block font-semibold text-gray-700 mb-1">Waktu (JJ:MM):</label>
+            <input type="time" id="formScheduleTime" class="w-full border-gray-300 rounded-lg p-2.5 text-sm bg-gray-50 font-mono font-bold">
+          </div>
+        </div>
+        <div>
+          <label class="block font-semibold text-gray-700 mb-1">Nama Bel / Kegiatan:</label>
+          <input type="text" id="formScheduleName" placeholder="Contoh: Bel Masuk Kelas" class="w-full border-gray-300 rounded-lg p-2.5 text-sm bg-gray-50">
+        </div>
+        <div>
+          <label class="block font-semibold text-gray-700 mb-1">Pilih Nada / Kode Audio:</label>
+          <select id="formScheduleAudio" class="w-full border-gray-300 rounded-lg p-2.5 text-sm bg-gray-50"></select>
+        </div>
+        <div>
+          <label class="block font-semibold text-gray-700 mb-1">Keterangan (Opsional):</label>
+          <input type="text" id="formScheduleNotes" placeholder="Catatan tambahan" class="w-full border-gray-300 rounded-lg p-2.5 text-sm bg-gray-50">
+        </div>
+      </div>
+
+      <div class="flex space-x-2 pt-2">
+        <button onclick="closeModal('modalSchedule')" class="w-1/2 py-2 bg-gray-100 hover:bg-gray-200 rounded-lg text-sm font-semibold text-gray-700 transition">Batal</button>
+        <button onclick="saveSchedule()" class="w-1/2 py-2 bg-blue-900 hover:bg-blue-800 rounded-lg text-sm font-semibold text-white transition">Simpan Jadwal</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 3. Add/Edit Group Modal -->
+  <div id="modalGroup" class="hidden fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
+    <div class="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-4">
+      <h3 class="text-lg font-bold text-gray-800" id="groupModalTitle">Tambah Grup Jadwal</h3>
+      <input type="hidden" id="formGroupID">
+
+      <div class="space-y-3 text-xs">
+        <div>
+          <label class="block font-semibold text-gray-700 mb-1">Nama Grup:</label>
+          <input type="text" id="formGroupName" placeholder="Contoh: Grup Ujian PTS / PAS" class="w-full border-gray-300 rounded-lg p-2.5 text-sm bg-gray-50">
+        </div>
+        <div>
+          <label class="block font-semibold text-gray-700 mb-1">Deskripsi:</label>
+          <textarea id="formGroupDesc" rows="3" placeholder="Penjelasan jadwal..." class="w-full border-gray-300 rounded-lg p-2.5 text-sm bg-gray-50"></textarea>
+        </div>
+      </div>
+
+      <div class="flex space-x-2 pt-2">
+        <button onclick="closeModal('modalGroup')" class="w-1/2 py-2 bg-gray-100 hover:bg-gray-200 rounded-lg text-sm font-semibold text-gray-700 transition">Batal</button>
+        <button onclick="saveGroup()" class="w-1/2 py-2 bg-blue-900 hover:bg-blue-800 rounded-lg text-sm font-semibold text-white transition">Simpan Grup</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 4. Group Date Range Modal -->
+  <div id="modalDateRange" class="hidden fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
+    <div class="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-4">
+      <h3 class="text-lg font-bold text-gray-800">Setel Rentang Tanggal Aktif</h3>
+      <p class="text-xs text-gray-500">Saat rentang tanggal aktif, grup ini akan diprioritaskan secara otomatis pada tanggal-tanggal tersebut.</p>
+      <input type="hidden" id="rangeGroupID">
+
+      <div class="space-y-3 text-xs">
+        <div class="flex items-center space-x-2">
+          <input type="checkbox" id="rangeEnabled" class="w-4 h-4 text-blue-600 rounded">
+          <label for="rangeEnabled" class="font-bold text-gray-800">Aktifkan Otomatisasi Rentang Tanggal</label>
+        </div>
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="block font-semibold text-gray-700 mb-1">Mulai Tanggal:</label>
+            <input type="date" id="rangeStartDate" class="w-full border-gray-300 rounded-lg p-2.5 text-sm bg-gray-50">
+          </div>
+          <div>
+            <label class="block font-semibold text-gray-700 mb-1">Sampai Tanggal:</label>
+            <input type="date" id="rangeEndDate" class="w-full border-gray-300 rounded-lg p-2.5 text-sm bg-gray-50">
+          </div>
+        </div>
+      </div>
+
+      <div class="flex space-x-2 pt-2">
+        <button onclick="closeModal('modalDateRange')" class="w-1/2 py-2 bg-gray-100 hover:bg-gray-200 rounded-lg text-sm font-semibold text-gray-700 transition">Batal</button>
+        <button onclick="saveDateRange()" class="w-1/2 py-2 bg-blue-900 hover:bg-blue-800 rounded-lg text-sm font-semibold text-white transition">Simpan</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 5. Audio Upload Modal -->
+  <div id="modalAudioUpload" class="hidden fixed inset-0 bg-black/60 backdrop-blur-xs z-50 flex items-center justify-center p-4">
+    <div class="bg-white rounded-2xl max-w-lg w-full p-6 shadow-2xl space-y-4 border border-green-100 flex flex-col max-h-[92vh]">
+      <div class="flex justify-between items-center border-b border-gray-100 pb-3">
+        <div>
+          <h3 class="text-base font-extrabold text-green-950 flex items-center space-x-2">
+            <span>🎵</span>
+            <span>Unggah Nada Bel & Lagu</span>
+          </h3>
+          <p class="text-xs text-gray-500 mt-0.5">Bisa pilih 1 file atau <b>banyak lagu sekaligus (Batch Upload)</b>.</p>
+        </div>
+        <button onclick="closeModal('modalAudioUpload')" class="w-8 h-8 rounded-full bg-gray-100 hover:bg-gray-200 text-gray-600 font-bold flex items-center justify-center transition">✕</button>
+      </div>
+
+      <form id="formAudioUpload" onsubmit="submitAudioUpload(event)" class="space-y-4 text-xs overflow-y-auto pr-1">
+        <!-- Dropzone / File Picker -->
+        <div>
+          <label class="block font-bold text-gray-700 mb-1.5">Pilih File Lagu / Audio (MP3 / WAV / OGG):</label>
+          <div id="audioDropArea" class="border-2 border-dashed border-green-300 hover:border-green-500 bg-green-50/40 rounded-xl p-5 text-center cursor-pointer transition">
+            <input type="file" id="uploadAudioFiles" name="audio_files" accept=".mp3,.wav,.ogg" multiple class="hidden" onchange="handleAudioFilesSelected(this.files)">
+            <div onclick="document.getElementById('uploadAudioFiles').click()" class="space-y-1.5">
+              <span class="text-3xl block">📥</span>
+              <div class="font-bold text-green-950 text-xs">Klik di sini untuk memilih lagu atau seret file ke sini</div>
+              <div class="text-[11px] text-gray-500">Bisa pilih <b>banyak file sekaligus</b> (Tahan tombol <b>Ctrl</b> atau <b>Shift</b> di keyboard lalu pilih lagu)</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Selected Files Preview Box -->
+        <div id="selectedAudioPreviewBox" class="hidden space-y-2">
+          <div class="flex items-center justify-between text-xs font-bold text-green-900">
+            <span id="selectedAudioCountText">📁 0 File Dipilih:</span>
+            <button type="button" onclick="clearSelectedAudioFiles()" class="text-red-600 hover:text-red-700 font-semibold text-[11px] cursor-pointer">✕ Hapus Pilihan</button>
+          </div>
+          <div id="selectedAudioList" class="max-h-36 overflow-y-auto bg-gray-50 p-2.5 rounded-lg border border-gray-200 divide-y divide-gray-100 space-y-1">
+            <!-- Populated via JS -->
+          </div>
+        </div>
+
+        <!-- Single Audio Details (Shown only when exactly 1 file is selected) -->
+        <div id="singleAudioFields" class="space-y-3">
+          <div>
+            <label class="block font-bold text-gray-700 mb-1">Nama Nada Bel (Opsional):</label>
+            <input type="text" id="uploadAudioName" name="name" placeholder="Biarkan kosong untuk memakai judul file asli" class="w-full border border-gray-300 rounded-lg p-2 bg-white text-xs text-gray-800">
+          </div>
+          <div>
+            <label class="block font-bold text-gray-700 mb-1">Keterangan (Opsional):</label>
+            <input type="text" id="uploadAudioDesc" name="description" placeholder="Catatan penggunaan nada" class="w-full border border-gray-300 rounded-lg p-2 bg-white text-xs text-gray-800">
+          </div>
+        </div>
+
+        <!-- Multiple Audio Info Badge (Shown when >1 file is selected) -->
+        <div id="multiAudioBadge" class="hidden bg-green-50 p-3 rounded-xl border border-green-200 text-[11px] text-green-900 leading-relaxed">
+          💡 <b>Upload Massal Aktif:</b> Setiap lagu akan otomatis menggunakan judul file lagunya, dan sistem membuatkan Kode Audio unik (<code>AUD-XX</code>) secara berurutan.
+        </div>
+
+        <div class="flex space-x-2 pt-2 border-t border-gray-100">
+          <button type="button" onclick="closeModal('modalAudioUpload')" class="w-1/3 py-2.5 bg-gray-100 hover:bg-gray-200 rounded-xl text-xs font-bold text-gray-700 transition">Batal</button>
+          <button type="submit" id="btnSubmitAudioUpload" class="w-2/3 py-2.5 bg-green-700 hover:bg-green-600 rounded-xl text-xs font-bold text-white shadow transition flex items-center justify-center space-x-1.5 cursor-pointer">
+            <span>🚀</span>
+            <span id="btnSubmitAudioUploadText">Upload Lagu Sekarang</span>
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- 6. Excel Import Modal -->
+  <!-- Modal Import Excel dengan Pilihan Grup Pintar -->
+  <div id="modalExcelImport" class="hidden fixed inset-0 bg-black/60 backdrop-blur-xs z-50 flex items-center justify-center p-4">
+    <div class="bg-white rounded-2xl max-w-lg w-full p-6 shadow-2xl space-y-4 border border-indigo-100 flex flex-col max-h-[92vh]">
+      <div class="flex justify-between items-center border-b border-gray-100 pb-3">
+        <div>
+          <h3 class="text-base font-extrabold text-indigo-950 flex items-center space-x-2">
+            <span>📥</span>
+            <span>Import Jadwal dari Excel (.xlsx)</span>
+          </h3>
+          <p class="text-xs text-gray-500 mt-0.5">Susun jadwal di Excel lebih mudah tanpa perlu menghafal kode audio.</p>
+        </div>
+        <button onclick="closeModal('modalExcelImport')" class="w-8 h-8 rounded-full bg-gray-100 hover:bg-gray-200 text-gray-600 font-bold flex items-center justify-center transition">✕</button>
+      </div>
+
+      <form id="formExcelImport" onsubmit="submitExcelImport(event)" class="space-y-4 text-xs overflow-y-auto pr-1">
+        <!-- Step 1: File -->
+        <div>
+          <label class="block font-bold text-gray-700 mb-1">1. Pilih File Excel (.xlsx):</label>
+          <input type="file" id="uploadExcelFile" name="excel_file" accept=".xlsx" required class="w-full border border-gray-300 rounded-lg p-2.5 bg-gray-50 text-xs cursor-pointer focus:ring-indigo-500">
+        </div>
+
+        <!-- Step 2: Target Group Choice -->
+        <div class="space-y-2.5 p-3.5 bg-indigo-50/60 rounded-xl border border-indigo-200">
+          <label class="block font-bold text-indigo-950">2. Tentukan Tujuan Grup Jadwal:</label>
+          
+          <!-- Radio Option 1: Existing Group -->
+          <div class="space-y-2">
+            <label class="flex items-center space-x-2 cursor-pointer font-bold text-gray-800">
+              <input type="radio" name="import_group_mode" value="specific" id="grpModeSpecific" checked onchange="updateImportModalGroupUI()" class="text-indigo-600 focus:ring-indigo-500">
+              <span>Perbarui Grup yang Sudah Ada</span>
+            </label>
+            <div id="divTargetGroupSelect" class="pl-6 space-y-2">
+              <select id="importTargetGroupSelect" class="w-full border border-gray-300 rounded-lg p-2 bg-white text-xs font-semibold text-gray-800">
+                <!-- Populated dynamically -->
+              </select>
+              <div class="flex items-center space-x-4 pt-1">
+                <label class="flex items-center space-x-1.5 text-xs text-gray-700 cursor-pointer">
+                  <input type="radio" name="import_replace_mode" value="replace" checked class="text-indigo-600">
+                  <span class="font-medium text-red-700">Timpa Total Jadwal Lama (Replace)</span>
+                </label>
+                <label class="flex items-center space-x-1.5 text-xs text-gray-700 cursor-pointer">
+                  <input type="radio" name="import_replace_mode" value="append" class="text-indigo-600">
+                  <span class="font-medium text-gray-700">Tambahkan Saja (Append)</span>
+                </label>
+              </div>
+            </div>
+          </div>
+
+          <!-- Radio Option 2: New Group -->
+          <div class="space-y-2 pt-2 border-t border-indigo-100">
+            <label class="flex items-center space-x-2 cursor-pointer font-bold text-gray-800">
+              <input type="radio" name="import_group_mode" value="new" id="grpModeNew" onchange="updateImportModalGroupUI()" class="text-indigo-600 focus:ring-indigo-500">
+              <span>Buat Grup Baru Otomatis</span>
+            </label>
+            <div id="divNewGroupName" class="pl-6 hidden">
+              <input type="text" id="importNewGroupNameInput" placeholder="Ketik nama grup baru, misal: Jadwal Ramadhan 2026" class="w-full border border-gray-300 rounded-lg p-2 bg-white text-xs text-gray-800">
+              <div class="text-[10px] text-gray-500 mt-1">Sistem akan membuatkan grup baru ini dan memasukkan seluruh baris jadwal ke dalamnya.</div>
+            </div>
+          </div>
+
+          <!-- Radio Option 3: From File Column -->
+          <div class="pt-2 border-t border-indigo-100">
+            <label class="flex items-center space-x-2 cursor-pointer font-medium text-gray-700">
+              <input type="radio" name="import_group_mode" value="file" id="grpModeFile" onchange="updateImportModalGroupUI()" class="text-indigo-600 focus:ring-indigo-500">
+              <span>Gunakan Nama Grup dari Kolom 'Grup' di File Excel</span>
+            </label>
+          </div>
+        </div>
+
+        <div class="flex space-x-2 pt-2">
+          <button type="button" onclick="closeModal('modalExcelImport')" class="w-1/3 py-2.5 bg-gray-100 hover:bg-gray-200 rounded-xl text-xs font-bold text-gray-700 transition">Batal</button>
+          <button type="submit" id="btnSubmitExcelImport" class="w-2/3 py-2.5 bg-indigo-700 hover:bg-indigo-600 rounded-xl text-xs font-bold text-white shadow transition flex items-center justify-center space-x-1.5 cursor-pointer">
+            <span>📥</span>
+            <span>Mulai Import Excel</span>
+          </button>
+        </div>
+      </form>
+
+      <!-- Import Result Box -->
+      <div id="importReportBox" class="hidden p-3 bg-gray-50 rounded-xl border border-gray-200 text-xs max-h-48 overflow-y-auto space-y-1"></div>
+    </div>
+  </div>
+
+  <!-- 7. Emergency Siren Modal -->
+  <div id="modalEmergency" class="hidden fixed inset-0 bg-black bg-opacity-70 z-50 flex items-center justify-center p-4">
+    <div class="bg-white rounded-2xl max-w-sm w-full p-6 shadow-2xl text-center space-y-4 border-2 border-red-500">
+      <div class="w-16 h-16 bg-red-100 text-red-600 rounded-full flex items-center justify-center mx-auto text-3xl animate-bounce">
+        🚨
+      </div>
+      <div>
+        <h3 class="text-xl font-extrabold text-red-600 uppercase tracking-tight">Konfirmasi Sirine Darurat</h3>
+        <p class="text-xs text-gray-600 mt-2">
+          Sirine evakuasi / bahaya akan langsung dibunyikan keras di speaker server sekolah. Pastikan situasi ini benar-benar darurat atau simulasi resmi!
+        </p>
+      </div>
+      <div class="flex space-x-2 pt-2">
+        <button onclick="closeModal('modalEmergency')" class="w-1/2 py-2.5 bg-gray-200 hover:bg-gray-300 rounded-lg text-sm font-semibold text-gray-800 transition">Batal</button>
+        <button onclick="confirmEmergencyTrigger()" class="w-1/2 py-2.5 bg-red-600 hover:bg-red-700 rounded-lg text-sm font-bold text-white transition animate-pulse">BUNYIKAN SEKARANG</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 8. Restore DB Modal -->
+  <div id="modalRestore" class="hidden fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
+    <div class="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-4 border border-red-300">
+      <h3 class="text-lg font-bold text-red-700">Restore Database (.db)</h3>
+      <p class="text-xs text-gray-600">Pilih file cadangan SQLite (.db). Data saat ini akan digantikan dengan data dari file cadangan tersebut.</p>
+
+      <form id="formRestoreDB" onsubmit="submitRestoreDB(event)" class="space-y-3 text-xs">
+        <div>
+          <label class="block font-semibold text-gray-700 mb-1">File Database Cadangan:</label>
+          <input type="file" id="uploadDBFile" name="db_file" accept=".db" required class="w-full border border-gray-300 rounded-lg p-2 bg-gray-50 text-xs">
+        </div>
+        <div class="flex space-x-2 pt-2">
+          <button type="button" onclick="closeModal('modalRestore')" class="w-1/2 py-2 bg-gray-100 hover:bg-gray-200 rounded-lg text-sm font-semibold text-gray-700 transition">Batal</button>
+          <button type="submit" class="w-1/2 py-2 bg-red-700 hover:bg-red-600 rounded-lg text-sm font-semibold text-white transition">Pulihkan Database</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- 9. Weekly Matrix Modal (Perbandingan Jadwal Lengkap Senin - Jumat) -->
+  <div id="modalWeeklyMatrix" class="hidden fixed inset-0 bg-black bg-opacity-60 z-50 flex items-center justify-center p-4">
+    <div class="bg-white rounded-3xl max-w-5xl w-full p-6 shadow-2xl space-y-4 border border-gray-200 max-h-[90vh] flex flex-col">
+      <div class="flex items-center justify-between border-b pb-3">
+        <div>
+          <h3 class="text-lg font-black text-blue-950 flex items-center space-x-2">
+            <span>📅</span>
+            <span>Matriks Jadwal Mingguan (Senin s/d Jumat)</span>
+          </h3>
+          <p class="text-xs text-gray-500 mt-0.5">Perbandingan jam bel per hari kerja sekolah agar tidak bingung membaca perbedaan jadwal.</p>
+        </div>
+        <button onclick="closeModal('modalWeeklyMatrix')" class="w-8 h-8 rounded-full bg-gray-100 hover:bg-gray-200 text-gray-600 font-bold flex items-center justify-center transition">✕</button>
+      </div>
+
+      <div class="overflow-y-auto flex-1 pr-1">
+        <table class="min-w-full divide-y divide-gray-200 text-xs border border-gray-200 rounded-xl overflow-hidden">
+          <thead class="bg-blue-950 text-white font-bold uppercase tracking-wider text-[11px]">
+            <tr>
+              <th class="py-2.5 px-3 text-left w-20">Waktu</th>
+              <th class="py-2.5 px-3 text-left bg-blue-900 border-l border-blue-800">Senin (Upacara)</th>
+              <th class="py-2.5 px-3 text-left bg-blue-950 border-l border-blue-800">Selasa & Rabu</th>
+              <th class="py-2.5 px-3 text-left bg-amber-950 border-l border-amber-900 text-amber-200">Kamis (Pulang 14:15)</th>
+              <th class="py-2.5 px-3 text-left bg-teal-950 border-l border-teal-900 text-teal-200">Jumat (Shalat Jumat)</th>
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-gray-100 bg-white" id="weeklyMatrixBody">
+            <!-- Dynamically populated from JS -->
+          </tbody>
+        </table>
+      </div>
+
+      <div class="pt-3 border-t flex items-center justify-between text-xs text-gray-500">
+        <div class="flex items-center space-x-3">
+          <span class="flex items-center space-x-1"><span class="w-2.5 h-2.5 rounded-full bg-blue-600"></span><span>Rutin Bersama</span></span>
+          <span class="flex items-center space-x-1"><span class="w-2.5 h-2.5 rounded-full bg-purple-600"></span><span>Khusus Upacara</span></span>
+          <span class="flex items-center space-x-1"><span class="w-2.5 h-2.5 rounded-full bg-amber-500"></span><span>Khusus Kamis</span></span>
+          <span class="flex items-center space-x-1"><span class="w-2.5 h-2.5 rounded-full bg-teal-600"></span><span>Khusus Jumat</span></span>
+        </div>
+        <button onclick="closeModal('modalWeeklyMatrix')" class="px-5 py-2 bg-blue-900 hover:bg-blue-800 text-white rounded-xl font-bold shadow transition">Tutup</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal Pemisahan Suara (Isolasi Bel vs YouTube / WA / Game) -->
+  <div id="modalAudioIsolator" class="hidden fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
+    <div class="bg-white rounded-2xl shadow-2xl max-w-lg w-full overflow-hidden border border-indigo-100 flex flex-col max-h-[92vh]">
+      <!-- Header -->
+      <div class="p-5 bg-gradient-to-r from-indigo-900 via-blue-900 to-indigo-950 text-white flex justify-between items-center">
+        <div class="flex items-center space-x-3">
+          <span class="text-3xl">🎛️</span>
+          <div>
+            <h3 class="font-extrabold text-base">Pemisahan Jalur Suara</h3>
+            <p class="text-xs text-indigo-200">Supaya suara YouTube / WA tidak bocor ke speaker sekolah</p>
+          </div>
+        </div>
+        <button onclick="closeModal('modalAudioIsolator')" class="w-8 h-8 rounded-full bg-white/10 hover:bg-white/20 text-white font-bold flex items-center justify-center transition">✕</button>
+      </div>
+
+      <div class="p-5 space-y-4 overflow-y-auto">
+        <!-- 1-Click Action Buttons -->
+        <div class="space-y-2">
+          <label class="block text-xs font-bold text-gray-700 uppercase tracking-wider">Aksi Cepat 1-Klik:</label>
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+            <button onclick="openWindowsVolumeMixer()" class="p-3.5 bg-indigo-50 hover:bg-indigo-100 rounded-xl border border-indigo-200 text-left transition flex items-center space-x-3 group cursor-pointer shadow-2xs">
+              <span class="text-2xl group-hover:scale-110 transition">🎚️</span>
+              <div>
+                <div class="text-xs font-bold text-indigo-950">Buka Pengatur Suara Windows</div>
+                <div class="text-[10px] text-indigo-700 mt-0.5">Pilih speaker Chrome / WA / Bel</div>
+              </div>
+            </button>
+            <button onclick="openWindowsSndvol()" class="p-3.5 bg-gray-50 hover:bg-gray-100 rounded-xl border border-gray-200 text-left transition flex items-center space-x-3 group cursor-pointer shadow-2xs">
+              <span class="text-2xl group-hover:scale-110 transition">🎛️</span>
+              <div>
+                <div class="text-xs font-bold text-gray-900">Volume Mixer Klasik</div>
+                <div class="text-[10px] text-gray-500 mt-0.5">Atur volume tiap aplikasi</div>
+              </div>
+            </button>
+          </div>
+        </div>
+
+        <!-- Mute Windows Notification Sounds Toggle -->
+        <div class="flex items-center justify-between p-3.5 bg-amber-50 rounded-xl border border-amber-200">
+          <div class="pr-2">
+            <div class="text-xs font-bold text-amber-950 flex items-center space-x-1.5">
+              <span>🔇</span>
+              <span>Bisukan Suara Notifikasi Windows ("Ting!", Error, Colok USB)</span>
+            </div>
+            <div class="text-[11px] text-amber-800 mt-0.5">Mematikan bunyi "ting!" Windows agar tidak berbunyi mendadak ke speaker sekolah</div>
+          </div>
+          <input type="checkbox" id="modalMuteWinSounds" onchange="toggleWindowsSoundsMute(this.checked)" class="w-5 h-5 text-amber-600 rounded flex-shrink-0 cursor-pointer">
+        </div>
+
+        <!-- Easy 3-Step Guide -->
+        <div class="bg-blue-50/70 p-4 rounded-xl border border-blue-200 space-y-2.5">
+          <div class="text-xs font-bold text-blue-950 flex items-center space-x-1.5">
+            <span>💡</span>
+            <span>Cara Agar Bebas Nonton YouTube / Buka WA di Meja:</span>
+          </div>
+          <ol class="text-xs text-blue-900 space-y-2 list-decimal list-inside pl-1 leading-relaxed">
+            <li>Colok <b>Headphone / Speaker Meja</b> ke komputer untuk Anda sendiri (kabel ke <b>Amplifier Bel Sekolah</b> tetap tercolok di lubang speaker utama).</li>
+            <li>Klik tombol <b>"Buka Pengatur Suara Windows"</b> di atas.</li>
+            <li>Di jendela Windows yang terbuka, cari <b>Google Chrome</b> atau <b>WhatsApp</b>, lalu ubah <b>Output</b>-nya ke <b>Headphone</b>.</li>
+          </ol>
+          <div class="text-[11px] text-green-800 bg-green-100/70 px-3 py-2 rounded-lg border border-green-300 font-semibold flex items-center space-x-1.5">
+            <span>✓</span>
+            <span>Selesai! Sekali diatur, Windows akan mengingat setelan ini selamanya. Musik & WA hanya terdengar di telinga Anda!</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Footer -->
+      <div class="p-4 bg-gray-50 border-t border-gray-100 flex justify-end">
+        <button onclick="closeModal('modalAudioIsolator')" class="px-5 py-2 bg-indigo-900 hover:bg-indigo-800 text-white rounded-xl text-xs font-bold shadow transition">
+          Tutup
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Floating Active Audio Player Bar with Progress & Stop Button -->
+  <div id="floatingAudioPlayerBar" class="hidden fixed bottom-6 left-1/2 transform -translate-x-1/2 z-50 bg-blue-950/95 backdrop-blur text-white px-5 py-3 rounded-2xl shadow-2xl border border-blue-700 flex items-center space-x-4 max-w-lg w-[92%] transition-all duration-300">
+    <div class="w-10 h-10 rounded-xl bg-blue-600/30 text-blue-300 flex items-center justify-center text-lg animate-pulse flex-shrink-0">
+      🔊
+    </div>
+    <div class="flex-1 min-w-0">
+      <div class="text-[10px] font-extrabold uppercase tracking-wider text-blue-300 flex items-center space-x-1.5">
+        <span class="w-2 h-2 rounded-full bg-green-400 animate-ping"></span>
+        <span id="playerBarMode">Memutar di Browser</span>
+      </div>
+      <div id="playerBarTitle" class="text-xs font-bold truncate text-white mt-0.5">
+        Nama Nada Audio
+      </div>
+      <div id="playerBarProgress" class="text-[10px] text-blue-300 font-mono mt-0.5">
+        00:00
+      </div>
+    </div>
+    <!-- Big Red Stop Button -->
+    <button onclick="stopAllAudio()" class="px-4 py-2 bg-red-600 hover:bg-red-700 active:scale-95 text-white rounded-xl text-xs font-black shadow transition flex items-center space-x-1.5 flex-shrink-0">
+      <span>⏹</span>
+      <span>HENTIKAN</span>
+    </button>
+  </div>
+
+  <!-- Toast Container -->
+  <div id="toastContainer" style="z-index: 99999;" class="fixed bottom-4 right-4 space-y-2 max-w-sm w-full pointer-events-none"></div>
+
+  <!-- Audio Element for Web Audio Playback -->
+  <audio id="browserAudioPlayer" preload="auto"></audio>
+
+  <!-- Load Main Application Logic -->
+  <script src="/static/js/app.js?v=3.0"></script>
+</body>
+</html>
+
