@@ -1,5 +1,5 @@
-// Application State - Bell Budut v4.2
-console.log('=== BELL BUDUT v4.2 LOADED ===');
+// Application State - Bell Budut v4.3
+console.log('=== BELL BUDUT v4.3 LOADED ===');
 let isAdmin = false;
 let adminToken = localStorage.getItem('bell_admin_token') || '';
 let webAudioEnabled = false;
@@ -91,62 +91,23 @@ function initSSE() {
           document.getElementById('nextBellNotes').innerText = 'Semua jam bel untuk hari ini sudah berlalu';
         }
 
-        // 5. Server Speaker Status
+        // 5. Server Speaker Status (Header status only - does not interfere with buttons)
         const speakerStatus = document.getElementById('serverSpeakerStatus');
         if (data.is_server_playing) {
           speakerStatus.innerText = `Speaker: 🔊 Memutar (${data.current_playing})`;
           speakerStatus.className = 'text-xs text-green-600 font-bold animate-pulse';
-          serverCurrentPlayingCode = data.current_code || '';
-
-          // Sync activePlayback with current_code from server if available!
-          if (data.current_code) {
-            const isDifferent = !activePlayback || 
-              activePlayback.targetType !== 'server' || 
-              (activePlayback.code || '').toLowerCase() !== data.current_code.toLowerCase();
-            
-            if (isDifferent) {
-              const audioObj = (globalAudios || []).find(a => (a.code || '').toLowerCase() === data.current_code.toLowerCase());
-              activePlayback = {
-                targetType: 'server',
-                targetId: `srv-${data.current_code}`,
-                code: data.current_code,
-                name: audioObj ? audioObj.name : (data.current_playing || data.current_code),
-                schedId: null
-              };
-              updateAllPlayButtonsUI();
-            }
-          }
-
-          if (!activePlayback || (activePlayback.targetType !== 'sched' && activePlayback.targetType !== 'web')) {
-            showFloatingPlayerBar('Speaker Server (Soundcard)', data.current_playing);
-          }
         } else {
           speakerStatus.innerText = data.server_audio_enabled ? 'Speaker Server: Siap' : 'Speaker Server: Nonaktif';
           speakerStatus.className = 'text-xs text-gray-500';
-
-          // Grace period: Do not let stale TICK cancel active server playback within 2.5s of click!
-          const elapsed = Date.now() - (lastServerPlayTriggerTime || 0);
-          if (activePlayback && activePlayback.targetType === 'server' && elapsed > 2500) {
-            serverCurrentPlayingCode = '';
-            activePlayback = null;
-            hideFloatingPlayerBar();
-            updateAllPlayButtonsUI();
-          }
         }
 
       } else if (data.type === 'SERVER_AUDIO_STOPPED') {
-        const elapsed = Date.now() - (lastServerPlayTriggerTime || 0);
         if (activePlayback && activePlayback.targetType === 'server') {
-          // If specific audio_code was stopped, only clear if it matches OR grace period elapsed
-          if (!data.audio_code || (activePlayback.code || '').toLowerCase() === (data.audio_code || '').toLowerCase() || elapsed > 2500) {
-            serverCurrentPlayingCode = '';
+          if (!data.audio_code || (activePlayback.code || '').toLowerCase() === (data.audio_code || '').toLowerCase()) {
             activePlayback = null;
             hideFloatingPlayerBar();
             updateAllPlayButtonsUI();
           }
-        } else {
-          serverCurrentPlayingCode = '';
-          updateAllPlayButtonsUI();
         }
       } else if (data.type === 'SERVER_AUDIO_STARTED') {
         serverCurrentPlayingCode = data.audio_code || '';
@@ -1239,7 +1200,7 @@ async function loadAudios() {
           </button>
         </td>
         <td class="py-3 px-4 text-center">
-          <button onclick="handlePlayAudioServer('${a.code}')" id="btn-play-srv-${a.code}" data-code="${a.code}" data-folder="${a.is_folder}" class="btn-server-audio px-2.5 py-1.5 ${a.is_folder ? 'bg-amber-600 hover:bg-amber-700 text-white' : 'bg-green-100 hover:bg-green-200 text-green-800'} rounded-lg text-xs font-semibold transition cursor-pointer">
+          <button onclick="handlePlayAudioServer('${a.code}')" id="btn-play-srv-${a.code}" data-code="${a.code}" data-folder="${a.is_folder}" class="btn-server-audio px-2.5 py-1.5 ${a.is_folder ? 'bg-amber-200 hover:bg-amber-300 text-amber-900' : 'bg-green-100 hover:bg-green-200 text-green-800'} rounded-lg text-xs font-semibold transition cursor-pointer">
             🔊 ${a.is_folder ? 'Bunyikan Acak di Server' : 'Bunyikan di Speaker'}
           </button>
         </td>
@@ -1345,16 +1306,15 @@ function updateAllPlayButtonsUI() {
   document.querySelectorAll('.btn-server-audio').forEach(btn => {
     const code = (btn.dataset.code || '').toLowerCase();
     const isFld = btn.dataset.folder === 'true';
-    const isThisPlaying = (activePlayback && activePlayback.targetType === 'server' && (activePlayback.code || '').toLowerCase() === code) ||
-                          (serverCurrentPlayingCode && serverCurrentPlayingCode.toLowerCase() === code);
+    const isThisPlaying = activePlayback && activePlayback.targetType === 'server' && (activePlayback.code || '').toLowerCase() === code;
 
     if (isThisPlaying) {
       btn.innerHTML = '⏹ Hentikan Server';
       btn.className = 'btn-server-audio px-2.5 py-1.5 bg-red-600 hover:bg-red-700 text-white rounded-lg text-xs font-bold shadow animate-pulse transition cursor-pointer';
       btn.title = 'Hentikan pemutaran lagu di speaker server';
     } else {
-      btn.innerHTML = isFld ? '🔊 Acak di Server' : '🔊 Bunyikan di Speaker';
-      btn.className = `btn-server-audio px-2.5 py-1.5 ${isFld ? 'bg-amber-600 hover:bg-amber-700 text-white' : 'bg-green-100 hover:bg-green-200 text-green-800'} rounded-lg text-xs font-semibold transition cursor-pointer`;
+      btn.innerHTML = isFld ? '🔊 Bunyikan Acak di Server' : '🔊 Bunyikan di Speaker';
+      btn.className = `btn-server-audio px-2.5 py-1.5 ${isFld ? 'bg-amber-200 hover:bg-amber-300 text-amber-900' : 'bg-green-100 hover:bg-green-200 text-green-800'} rounded-lg text-xs font-semibold transition cursor-pointer`;
       btn.title = 'Bunyikan lagu ini di speaker server';
     }
   });
@@ -1523,11 +1483,10 @@ async function handlePlayAudioWeb(code) {
 async function handlePlayAudioServer(code) {
   const normCode = (code || '').toLowerCase();
   const currentActiveCode = activePlayback && activePlayback.targetType === 'server' ? (activePlayback.code || '').toLowerCase() : '';
-  const currentServerCode = (serverCurrentPlayingCode || '').toLowerCase();
 
   // If user clicked the button that is ALREADY playing on server -> STOP IT!
-  if (currentActiveCode === normCode || currentServerCode === normCode) {
-    await stopServerAudio();
+  if (currentActiveCode === normCode) {
+    stopServerAudio();
     showToast('Pemutaran speaker server dihentikan', 'info');
     return;
   }
