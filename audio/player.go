@@ -16,6 +16,7 @@ type Player interface {
 	Stop() error
 	IsPlaying() bool
 	CurrentFile() string
+	SetOnEnd(fn func())
 }
 
 type Manager struct {
@@ -26,15 +27,37 @@ type Manager struct {
 	currentName string
 	lastPlayed  map[string]string // folder path -> last played filename
 	rng         *rand.Rand
+	onEnd       func(code, name string)
 }
 
 func NewManager(audioDir string) *Manager {
-	return &Manager{
+	m := &Manager{
 		player:     newPlatformPlayer(),
 		audioDir:   audioDir,
 		lastPlayed: make(map[string]string),
 		rng:        rand.New(rand.NewSource(time.Now().UnixNano())),
 	}
+	if m.player != nil {
+		m.player.SetOnEnd(func() {
+			m.mu.Lock()
+			code := m.currentCode
+			name := m.currentName
+			m.currentCode = ""
+			m.currentName = ""
+			cb := m.onEnd
+			m.mu.Unlock()
+			if cb != nil {
+				cb(code, name)
+			}
+		})
+	}
+	return m
+}
+
+func (m *Manager) SetOnEnd(fn func(code, name string)) {
+	m.mu.Lock()
+	m.onEnd = fn
+	m.mu.Unlock()
 }
 
 // ResolvePlayPath checks if path is a file or a folder.

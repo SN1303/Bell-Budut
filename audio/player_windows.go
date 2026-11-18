@@ -18,17 +18,22 @@ var (
 )
 
 type windowsPlayer struct {
-	mu          sync.Mutex
-	currentFile string
-	isPlaying   bool
-	alias       string
-	playID      uint64
+	mu           sync.Mutex
+	currentFile  string
+	isPlaying    bool
+	currentAlias string
+	playID       uint64
+	onEnd        func()
 }
 
 func newPlatformPlayer() Player {
-	return &windowsPlayer{
-		alias: "school_bell_active",
-	}
+	return &windowsPlayer{}
+}
+
+func (p *windowsPlayer) SetOnEnd(fn func()) {
+	p.mu.Lock()
+	p.onEnd = fn
+	p.mu.Unlock()
 }
 
 func (p *windowsPlayer) sendMCI(command string) (string, error) {
@@ -59,9 +64,12 @@ func (p *windowsPlayer) Play(filePath string) error {
 	p.playID++
 	currentID := p.playID
 
-	// Stop and close any previously playing audio unconditionally
-	p.sendMCI(fmt.Sprintf("stop %s", p.alias))
-	p.sendMCI(fmt.Sprintf("close %s", p.alias))
+	// 1. Close previously active alias immediately
+	if p.currentAlias != "" {
+		p.sendMCI(fmt.Sprintf("stop %s", p.currentAlias))
+		p.sendMCI(fmt.Sprintf("close %s", p.currentAlias))
+		p.currentAlias = ""
+	}
 	p.sendMCI("stop all")
 	p.sendMCI("close all")
 	p.isPlaying = false
@@ -72,32 +80,33 @@ func (p *windowsPlayer) Play(filePath string) error {
 		absPath = filePath
 	}
 
-	// Escape backslashes for MCI or use forward slashes
-	// In Windows MCI, wrapping absolute path in double quotes works reliably:
-	openCmd := fmt.Sprintf(`open "%s" alias %s`, absPath, p.alias)
+	// 2. Generate unique alias per playID to avoid device locked / name conflicts
+	alias := fmt.Sprintf("bell_dev_%d", currentID)
+
+	openCmd := fmt.Sprintf(`open "%s" alias %s`, absPath, alias)
 	if _, err := p.sendMCI(openCmd); err != nil {
-		// Fallback without alias quotes or with specific type
 		ext := strings.ToLower(filepath.Ext(absPath))
 		if ext == ".mp3" {
-			openCmd = fmt.Sprintf(`open "%s" type mpegvideo alias %s`, absPath, p.alias)
+			openCmd = fmt.Sprintf(`open "%s" type mpegvideo alias %s`, absPath, alias)
 		} else if ext == ".wav" {
-			openCmd = fmt.Sprintf(`open "%s" type waveaudio alias %s`, absPath, p.alias)
+			openCmd = fmt.Sprintf(`open "%s" type waveaudio alias %s`, absPath, alias)
 		}
 		if _, err2 := p.sendMCI(openCmd); err2 != nil {
 			return fmt.Errorf("gagal membuka audio: %w", err2)
 		}
 	}
 
-	playCmd := fmt.Sprintf("play %s", p.alias)
+	playCmd := fmt.Sprintf("play %s", alias)
 	if _, err := p.sendMCI(playCmd); err != nil {
-		p.sendMCI(fmt.Sprintf("close %s", p.alias))
+		p.sendMCI(fmt.Sprintf("close %s", alias))
 		return fmt.Errorf("gagal memutar audio: %w", err)
 	}
 
+	p.currentAlias = alias
 	p.currentFile = absPath
 	p.isPlaying = true
 
-	// Monitor playback end in a lightweight goroutine tied to currentID
+	// 3. Monitor playback end in a background goroutine
 	go func(id uint64, targetAlias string) {
 		ticker := time.NewTicker(250 * time.Millisecond)
 		defer ticker.Stop()
@@ -114,14 +123,21 @@ func (p *windowsPlayer) Play(filePath string) error {
 				if p.playID == id {
 					p.isPlaying = false
 					p.currentFile = ""
+					p.currentAlias = ""
 					p.sendMCI(fmt.Sprintf("close %s", targetAlias))
+					onEndFn := p.onEnd
+					p.mu.Unlock()
+					if onEndFn != nil {
+						go onEndFn()
+					}
+					return
 				}
 				p.mu.Unlock()
 				return
 			}
 			p.mu.Unlock()
 		}
-	}(currentID, p.alias)
+	}(currentID, alias)
 
 	return nil
 }
@@ -133,8 +149,11 @@ func (p *windowsPlayer) Stop() error {
 	p.playID++
 	p.isPlaying = false
 	p.currentFile = ""
-	p.sendMCI(fmt.Sprintf("stop %s", p.alias))
-	p.sendMCI(fmt.Sprintf("close %s", p.alias))
+	if p.currentAlias != "" {
+		p.sendMCI(fmt.Sprintf("stop %s", p.currentAlias))
+		p.sendMCI(fmt.Sprintf("close %s", p.currentAlias))
+		p.currentAlias = ""
+	}
 	p.sendMCI("stop all")
 	p.sendMCI("close all")
 	return nil
@@ -151,4 +170,3 @@ func (p *windowsPlayer) CurrentFile() string {
 	defer p.mu.Unlock()
 	return p.currentFile
 }
-

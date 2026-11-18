@@ -10,6 +10,8 @@ func newPlatformPlayer() Player {
 	return &otherPlayer{}
 }
 
+func (p *otherPlayer) SetOnEnd(fn func()) {}
+
 func (p *otherPlayer) Play(filePath string) error {
 	return errors.New("audio player sistem saat ini dioptimalkan untuk Windows (MCI)")
 }
@@ -25,4 +27,3 @@ func (p *otherPlayer) IsPlaying() bool {
 func (p *otherPlayer) CurrentFile() string {
 	return ""
 }
-

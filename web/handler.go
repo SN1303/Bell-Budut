@@ -32,13 +32,26 @@ type Server struct {
 }
 
 func NewServer(db *database.DB, audioMgr *audio.Manager, sched *scheduler.Scheduler, audioDir string) *Server {
-	return &Server{
+	s := &Server{
 		db:       db,
 		audioMgr: audioMgr,
 		sched:    sched,
 		audioDir: audioDir,
 		sessions: make(map[string]time.Time),
 	}
+
+	// Auto-broadcast when server soundcard finishes playing naturally
+	s.audioMgr.SetOnEnd(func(code, name string) {
+		stopPayload := map[string]interface{}{
+			"type":       "SERVER_AUDIO_STOPPED",
+			"audio_code": code,
+			"audio_name": name,
+		}
+		data, _ := json.Marshal(stopPayload)
+		s.sched.Broadcast(data)
+	})
+
+	return s
 }
 
 func (s *Server) Routes() http.Handler {
@@ -794,6 +807,15 @@ func (s *Server) handleAudioTestServer(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Broadcast that server audio started
+	startPayload := map[string]interface{}{
+		"type":       "SERVER_AUDIO_STARTED",
+		"audio_code": audioFile.Code,
+		"audio_name": audioFile.Name,
+	}
+	data, _ := json.Marshal(startPayload)
+	s.sched.Broadcast(data)
+
 	s.jsonSuccess(w, fmt.Sprintf("Sedang memutar '%s' di speaker server", audioFile.Name))
 }
 
@@ -802,6 +824,14 @@ func (s *Server) handleAudioStopServer(w http.ResponseWriter, r *http.Request) {
 		s.jsonError(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
+
+	// Broadcast that server audio stopped
+	stopPayload := map[string]interface{}{
+		"type": "SERVER_AUDIO_STOPPED",
+	}
+	data, _ := json.Marshal(stopPayload)
+	s.sched.Broadcast(data)
+
 	s.jsonSuccess(w, "Audio di server dihentikan")
 }
 

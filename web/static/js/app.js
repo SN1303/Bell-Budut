@@ -101,10 +101,30 @@ function initSSE() {
           speakerStatus.innerText = data.server_audio_enabled ? 'Speaker Server: Siap' : 'Speaker Server: Nonaktif';
           speakerStatus.className = 'text-xs text-gray-500';
           if (activePlayback && activePlayback.targetType === 'server') {
-            stopAllAudioSilent();
+            activePlayback = null;
+            hideFloatingPlayerBar();
+            updateAllPlayButtonsUI();
           }
         }
 
+      } else if (data.type === 'SERVER_AUDIO_STOPPED') {
+        if (activePlayback && activePlayback.targetType === 'server') {
+          activePlayback = null;
+          hideFloatingPlayerBar();
+          updateAllPlayButtonsUI();
+        }
+      } else if (data.type === 'SERVER_AUDIO_STARTED') {
+        if (!activePlayback || activePlayback.targetType === 'server') {
+          activePlayback = {
+            targetType: 'server',
+            targetId: `srv-${data.audio_code}`,
+            code: data.audio_code,
+            name: data.audio_name,
+            schedId: null
+          };
+          updateAllPlayButtonsUI();
+          showFloatingPlayerBar('Speaker Server (Soundcard)', `[${data.audio_code}] ${data.audio_name}`);
+        }
       } else if (data.type === 'BELL_RING') {
         // Live Bell Ring Event
         handleBellRingEvent(data);
@@ -1303,8 +1323,7 @@ function updateAllPlayButtonsUI() {
 }
 
 // Stop all audio silently (synchronous reset of HTML5 element + async fire to server MCI)
-function stopAllAudioSilent() {
-  // 1. Immediately pause and unbind HTML5 audio
+function stopBrowserAudio() {
   if (!audioPlayer) {
     audioPlayer = document.getElementById('browserAudioPlayer');
   }
@@ -1316,20 +1335,35 @@ function stopAllAudioSilent() {
       audioPlayer.load();
     } catch (e) {}
   }
+}
 
-  // 2. Stop server speaker audio asynchronously (never block UI)
+async function stopServerAudio() {
+  activePlayback = null;
+  hideFloatingPlayerBar();
+  updateAllPlayButtonsUI();
   try {
-    fetch('/api/audio/stop-server', { method: 'POST' }).catch(() => {});
+    await fetch('/api/audio/stop-server', { method: 'POST' });
   } catch (err) {}
+}
 
-  // 3. Reset state & all UI buttons
+function stopAllAudioSilent() {
+  stopBrowserAudio();
+  if (activePlayback && activePlayback.targetType === 'server') {
+    fetch('/api/audio/stop-server', { method: 'POST' }).catch(() => {});
+  }
   activePlayback = null;
   hideFloatingPlayerBar();
   updateAllPlayButtonsUI();
 }
 
 function stopAllAudio() {
-  stopAllAudioSilent();
+  stopBrowserAudio();
+  if (activePlayback && activePlayback.targetType === 'server') {
+    fetch('/api/audio/stop-server', { method: 'POST' }).catch(() => {});
+  }
+  activePlayback = null;
+  hideFloatingPlayerBar();
+  updateAllPlayButtonsUI();
   showToast('Semua pemutaran audio dihentikan', 'info');
 }
 
@@ -1337,17 +1371,24 @@ function stopAllAudio() {
 async function handlePlayScheduleRow(schedId, audioCode) {
   // If the user clicked the button that is already playing -> STOP IT!
   if (activePlayback && activePlayback.targetType === 'sched' && activePlayback.schedId === schedId) {
-    stopAllAudio();
+    stopBrowserAudio();
+    activePlayback = null;
+    hideFloatingPlayerBar();
+    updateAllPlayButtonsUI();
+    showToast('Pratinjau jadwal dihentikan', 'info');
     return;
   }
 
-  // 1. Instantly stop any previous audio (mutual exclusion: only 1 audio at a time!)
-  stopAllAudioSilent();
+  // If server sound was playing, stop it cleanly
+  if (activePlayback && activePlayback.targetType === 'server') {
+    fetch('/api/audio/stop-server', { method: 'POST' }).catch(() => {});
+  }
+  stopBrowserAudio();
 
   const audio = globalAudios.find(a => a.code.toLowerCase() === audioCode.toLowerCase());
   const audioName = audio ? audio.name : audioCode;
 
-  // 2. Register new active playback
+  // Register new active playback
   activePlayback = {
     targetType: 'sched',
     targetId: `sched-${schedId}`,
@@ -1356,15 +1397,17 @@ async function handlePlayScheduleRow(schedId, audioCode) {
     schedId: schedId
   };
 
-  // 3. Update UI buttons immediately (only this button gets Stop icon!)
   updateAllPlayButtonsUI();
   showFloatingPlayerBar('Pratinjau Jadwal Web', `[${audioCode}] ${audioName}`);
 
-  // 4. Play audio in browser
   if (!audioPlayer) audioPlayer = document.getElementById('browserAudioPlayer');
 
   audioPlayer.onended = () => {
-    stopAllAudioSilent();
+    if (activePlayback && activePlayback.targetType === 'sched' && activePlayback.schedId === schedId) {
+      activePlayback = null;
+      hideFloatingPlayerBar();
+      updateAllPlayButtonsUI();
+    }
   };
   audioPlayer.ontimeupdate = () => {
     const prog = document.getElementById('playerBarProgress');
@@ -1383,19 +1426,25 @@ async function handlePlayScheduleRow(schedId, audioCode) {
 
 // 2. Play "Dengar di Web" in Audio Library
 async function handlePlayAudioWeb(code) {
-  // If user clicked the button that is already playing -> STOP IT!
+  // If user clicked the button that is already playing on web -> STOP IT!
   if (activePlayback && activePlayback.targetType === 'web' && activePlayback.code.toLowerCase() === code.toLowerCase()) {
-    stopAllAudio();
+    stopBrowserAudio();
+    activePlayback = null;
+    hideFloatingPlayerBar();
+    updateAllPlayButtonsUI();
+    showToast('Pratinjau web dihentikan', 'info');
     return;
   }
 
-  // 1. Instantly stop any previous audio
-  stopAllAudioSilent();
+  // If server sound was playing, stop it cleanly
+  if (activePlayback && activePlayback.targetType === 'server') {
+    fetch('/api/audio/stop-server', { method: 'POST' }).catch(() => {});
+  }
+  stopBrowserAudio();
 
   const audio = globalAudios.find(a => a.code.toLowerCase() === code.toLowerCase());
   const audioName = audio ? audio.name : code;
 
-  // 2. Register new active playback
   activePlayback = {
     targetType: 'web',
     targetId: `web-${code}`,
@@ -1404,15 +1453,17 @@ async function handlePlayAudioWeb(code) {
     schedId: null
   };
 
-  // 3. Update UI buttons immediately
   updateAllPlayButtonsUI();
   showFloatingPlayerBar('Pratinjau Web Browser', `[${code}] ${audioName}`);
 
-  // 4. Play audio in browser
   if (!audioPlayer) audioPlayer = document.getElementById('browserAudioPlayer');
 
   audioPlayer.onended = () => {
-    stopAllAudioSilent();
+    if (activePlayback && activePlayback.targetType === 'web' && activePlayback.code.toLowerCase() === code.toLowerCase()) {
+      activePlayback = null;
+      hideFloatingPlayerBar();
+      updateAllPlayButtonsUI();
+    }
   };
   audioPlayer.ontimeupdate = () => {
     const prog = document.getElementById('playerBarProgress');
@@ -1431,19 +1482,20 @@ async function handlePlayAudioWeb(code) {
 
 // 3. Play "Bunyikan di Speaker" in Audio Library
 async function handlePlayAudioServer(code) {
-  // If user clicked the button that is already playing on server -> STOP IT!
+  // If user clicked the button that is ALREADY playing on server -> STOP IT!
   if (activePlayback && activePlayback.targetType === 'server' && activePlayback.code.toLowerCase() === code.toLowerCase()) {
-    stopAllAudio();
+    await stopServerAudio();
+    showToast('Pemutaran speaker server dihentikan', 'info');
     return;
   }
 
-  // 1. Instantly stop any previous audio (both browser and previous server sound)
-  stopAllAudioSilent();
+  // 1. Instantly silence any browser audio
+  stopBrowserAudio();
 
   const audio = globalAudios.find(a => a.code.toLowerCase() === code.toLowerCase());
   const audioName = audio ? audio.name : code;
 
-  // 2. Register new active playback
+  // 2. Register new active playback immediately (reverts previous song button to 🔊, sets this one to ⏹)
   activePlayback = {
     targetType: 'server',
     targetId: `srv-${code}`,
@@ -1452,11 +1504,10 @@ async function handlePlayAudioServer(code) {
     schedId: null
   };
 
-  // 3. Update UI buttons immediately
   updateAllPlayButtonsUI();
   showFloatingPlayerBar('Speaker Server (Soundcard)', `[${code}] ${audioName}`);
 
-  // 4. Send play command to server
+  // 3. Send test-server command (Go server handles track-switch atomically without client race conditions)
   try {
     const res = await fetch('/api/audio/test-server', {
       method: 'POST',
@@ -1468,11 +1519,19 @@ async function handlePlayAudioServer(code) {
       showToast(json.data || `Memutar [${code}] di speaker server`, 'info');
     } else {
       showToast(json.error || 'Gagal memutar audio di server', 'error');
-      stopAllAudioSilent();
+      if (activePlayback && activePlayback.targetType === 'server' && activePlayback.code.toLowerCase() === code.toLowerCase()) {
+        activePlayback = null;
+        hideFloatingPlayerBar();
+        updateAllPlayButtonsUI();
+      }
     }
   } catch (err) {
     showToast('Gagal terhubung ke server', 'error');
-    stopAllAudioSilent();
+    if (activePlayback && activePlayback.targetType === 'server' && activePlayback.code.toLowerCase() === code.toLowerCase()) {
+      activePlayback = null;
+      hideFloatingPlayerBar();
+      updateAllPlayButtonsUI();
+    }
   }
 }
 
