@@ -1,4 +1,5 @@
-// Application State
+// Application State - Bell Budut v4.2
+console.log('=== BELL BUDUT v4.2 LOADED ===');
 let isAdmin = false;
 let adminToken = localStorage.getItem('bell_admin_token') || '';
 let webAudioEnabled = false;
@@ -7,6 +8,7 @@ let globalGroups = [];
 let globalAudios = [];
 let audioPlayer = document.getElementById('browserAudioPlayer');
 let sseConnection = null;
+let serverCurrentPlayingCode = '';
 
 // ==================== INITIALIZATION ====================
 
@@ -94,6 +96,7 @@ function initSSE() {
         if (data.is_server_playing) {
           speakerStatus.innerText = `Speaker: 🔊 Memutar (${data.current_playing})`;
           speakerStatus.className = 'text-xs text-green-600 font-bold animate-pulse';
+          serverCurrentPlayingCode = data.current_code || '';
 
           // Sync activePlayback with current_code from server if available!
           if (data.current_code) {
@@ -124,6 +127,7 @@ function initSSE() {
           // Grace period: Do not let stale TICK cancel active server playback within 2.5s of click!
           const elapsed = Date.now() - (lastServerPlayTriggerTime || 0);
           if (activePlayback && activePlayback.targetType === 'server' && elapsed > 2500) {
+            serverCurrentPlayingCode = '';
             activePlayback = null;
             hideFloatingPlayerBar();
             updateAllPlayButtonsUI();
@@ -135,12 +139,17 @@ function initSSE() {
         if (activePlayback && activePlayback.targetType === 'server') {
           // If specific audio_code was stopped, only clear if it matches OR grace period elapsed
           if (!data.audio_code || (activePlayback.code || '').toLowerCase() === (data.audio_code || '').toLowerCase() || elapsed > 2500) {
+            serverCurrentPlayingCode = '';
             activePlayback = null;
             hideFloatingPlayerBar();
             updateAllPlayButtonsUI();
           }
+        } else {
+          serverCurrentPlayingCode = '';
+          updateAllPlayButtonsUI();
         }
       } else if (data.type === 'SERVER_AUDIO_STARTED') {
+        serverCurrentPlayingCode = data.audio_code || '';
         const audioObj = (globalAudios || []).find(a => (a.code || '').toLowerCase() === (data.audio_code || '').toLowerCase());
         activePlayback = {
           targetType: 'server',
@@ -1334,9 +1343,10 @@ function updateAllPlayButtonsUI() {
 
   // 3. Audio Library Server Buttons (Tab 3)
   document.querySelectorAll('.btn-server-audio').forEach(btn => {
-    const code = btn.dataset.code;
+    const code = (btn.dataset.code || '').toLowerCase();
     const isFld = btn.dataset.folder === 'true';
-    const isThisPlaying = activePlayback && activePlayback.targetType === 'server' && activePlayback.code.toLowerCase() === (code || '').toLowerCase();
+    const isThisPlaying = (activePlayback && activePlayback.targetType === 'server' && (activePlayback.code || '').toLowerCase() === code) ||
+                          (serverCurrentPlayingCode && serverCurrentPlayingCode.toLowerCase() === code);
 
     if (isThisPlaying) {
       btn.innerHTML = '⏹ Hentikan Server';
@@ -1366,6 +1376,7 @@ function stopBrowserAudio() {
 }
 
 async function stopServerAudio() {
+  serverCurrentPlayingCode = '';
   activePlayback = null;
   hideFloatingPlayerBar();
   updateAllPlayButtonsUI();
@@ -1510,8 +1521,12 @@ async function handlePlayAudioWeb(code) {
 
 // 3. Play "Bunyikan di Speaker" in Audio Library
 async function handlePlayAudioServer(code) {
+  const normCode = (code || '').toLowerCase();
+  const currentActiveCode = activePlayback && activePlayback.targetType === 'server' ? (activePlayback.code || '').toLowerCase() : '';
+  const currentServerCode = (serverCurrentPlayingCode || '').toLowerCase();
+
   // If user clicked the button that is ALREADY playing on server -> STOP IT!
-  if (activePlayback && activePlayback.targetType === 'server' && activePlayback.code.toLowerCase() === code.toLowerCase()) {
+  if (currentActiveCode === normCode || currentServerCode === normCode) {
     await stopServerAudio();
     showToast('Pemutaran speaker server dihentikan', 'info');
     return;

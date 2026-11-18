@@ -5,6 +5,7 @@ package audio
 import (
 	"fmt"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 	"syscall"
@@ -23,6 +24,8 @@ type windowsPlayer struct {
 	isPlaying    bool
 	currentAlias string
 	playID       uint64
+	durationMs   int64
+	startTime    time.Time
 	onEnd        func()
 }
 
@@ -96,6 +99,13 @@ func (p *windowsPlayer) Play(filePath string) error {
 		}
 	}
 
+	// 3. Query duration in milliseconds
+	p.sendMCI(fmt.Sprintf("set %s time format milliseconds", alias))
+	lenStr, _ := p.sendMCI(fmt.Sprintf("status %s length", alias))
+	durMs, _ := strconv.ParseInt(strings.TrimSpace(lenStr), 10, 64)
+	p.durationMs = durMs
+	p.startTime = time.Now()
+
 	playCmd := fmt.Sprintf("play %s", alias)
 	if _, err := p.sendMCI(playCmd); err != nil {
 		p.sendMCI(fmt.Sprintf("close %s", alias))
@@ -106,13 +116,12 @@ func (p *windowsPlayer) Play(filePath string) error {
 	p.currentFile = absPath
 	p.isPlaying = true
 
-	// 3. Monitor playback end in a background goroutine with debounce
-	go func(id uint64, targetAlias string) {
-		time.Sleep(300 * time.Millisecond)
-		ticker := time.NewTicker(250 * time.Millisecond)
+	// 4. Monitor playback end in a background goroutine with duration awareness
+	go func(id uint64, targetAlias string, durationMs int64, startTime time.Time) {
+		ticker := time.NewTicker(500 * time.Millisecond)
 		defer ticker.Stop()
 
-		consecutiveNonPlaying := 0
+		consecutiveStopped := 0
 
 		for range ticker.C {
 			p.mu.Lock()
@@ -121,32 +130,56 @@ func (p *windowsPlayer) Play(filePath string) error {
 				return
 			}
 
-			status, err := p.sendMCI(fmt.Sprintf("status %s mode", targetAlias))
-			if err != nil || status != "playing" {
-				consecutiveNonPlaying++
-				if consecutiveNonPlaying >= 3 {
-					if p.playID == id {
-						p.isPlaying = false
-						p.currentFile = ""
-						p.currentAlias = ""
-						p.sendMCI(fmt.Sprintf("close %s", targetAlias))
-						onEndFn := p.onEnd
-						p.mu.Unlock()
-						if onEndFn != nil {
-							go onEndFn()
-						}
-						return
-					}
+			elapsedMs := time.Since(startTime).Milliseconds()
+
+			// While elapsed time is well within the known duration (with 1s safety margin),
+			// playback is guaranteed to be running. Ignore any transient MCI driver busy errors!
+			if durationMs > 1500 && elapsedMs < durationMs-1000 {
+				p.mu.Unlock()
+				continue
+			}
+
+			status, _ := p.sendMCI(fmt.Sprintf("status %s mode", targetAlias))
+			posStr, _ := p.sendMCI(fmt.Sprintf("status %s position", targetAlias))
+			posMs, _ := strconv.ParseInt(strings.TrimSpace(posStr), 10, 64)
+
+			isFinished := false
+			if durationMs > 0 {
+				if (posMs > 0 && posMs >= durationMs-200) || elapsedMs >= durationMs+1000 {
+					isFinished = true
+				}
+			}
+			if status == "stopped" && elapsedMs > 1000 {
+				isFinished = true
+			}
+			if status != "playing" && (durationMs <= 0 || elapsedMs >= durationMs) {
+				consecutiveStopped++
+				if consecutiveStopped >= 2 {
+					isFinished = true
+				}
+			} else if status == "playing" {
+				consecutiveStopped = 0
+			}
+
+			if isFinished {
+				if p.playID == id {
+					p.isPlaying = false
+					p.currentFile = ""
+					p.currentAlias = ""
+					p.sendMCI(fmt.Sprintf("close %s", targetAlias))
+					onEndFn := p.onEnd
 					p.mu.Unlock()
+					if onEndFn != nil {
+						go onEndFn()
+					}
 					return
 				}
-			} else {
-				// Successfully confirmed "playing" state -> reset debounce counter
-				consecutiveNonPlaying = 0
+				p.mu.Unlock()
+				return
 			}
 			p.mu.Unlock()
 		}
-	}(currentID, alias)
+	}(currentID, alias, durMs, p.startTime)
 
 	return nil
 }
