@@ -42,6 +42,7 @@ type StatusPayload struct {
 	ServerAudioEnabled bool               `json:"server_audio_enabled"`
 	IsServerPlaying    bool               `json:"is_server_playing"`
 	CurrentPlaying     string             `json:"current_playing"`
+	CurrentCode        string             `json:"current_code,omitempty"`
 }
 
 type Scheduler struct {
@@ -155,6 +156,7 @@ func (s *Scheduler) handleTick(now time.Time) {
 		ServerAudioEnabled: serverAudioEnabled,
 		IsServerPlaying:    isPlaying,
 		CurrentPlaying:     curPlayingStr,
+		CurrentCode:        curCode,
 	}
 
 	data, err := json.Marshal(status)

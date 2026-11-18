@@ -94,13 +94,36 @@ function initSSE() {
         if (data.is_server_playing) {
           speakerStatus.innerText = `Speaker: 🔊 Memutar (${data.current_playing})`;
           speakerStatus.className = 'text-xs text-green-600 font-bold animate-pulse';
+
+          // Sync activePlayback with current_code from server if available!
+          if (data.current_code) {
+            const isDifferent = !activePlayback || 
+              activePlayback.targetType !== 'server' || 
+              (activePlayback.code || '').toLowerCase() !== data.current_code.toLowerCase();
+            
+            if (isDifferent) {
+              const audioObj = (globalAudios || []).find(a => (a.code || '').toLowerCase() === data.current_code.toLowerCase());
+              activePlayback = {
+                targetType: 'server',
+                targetId: `srv-${data.current_code}`,
+                code: data.current_code,
+                name: audioObj ? audioObj.name : (data.current_playing || data.current_code),
+                schedId: null
+              };
+              updateAllPlayButtonsUI();
+            }
+          }
+
           if (!activePlayback || (activePlayback.targetType !== 'sched' && activePlayback.targetType !== 'web')) {
             showFloatingPlayerBar('Speaker Server (Soundcard)', data.current_playing);
           }
         } else {
           speakerStatus.innerText = data.server_audio_enabled ? 'Speaker Server: Siap' : 'Speaker Server: Nonaktif';
           speakerStatus.className = 'text-xs text-gray-500';
-          if (activePlayback && activePlayback.targetType === 'server') {
+
+          // Grace period: Do not let stale TICK cancel active server playback within 2.5s of click!
+          const elapsed = Date.now() - (lastServerPlayTriggerTime || 0);
+          if (activePlayback && activePlayback.targetType === 'server' && elapsed > 2500) {
             activePlayback = null;
             hideFloatingPlayerBar();
             updateAllPlayButtonsUI();
@@ -108,23 +131,27 @@ function initSSE() {
         }
 
       } else if (data.type === 'SERVER_AUDIO_STOPPED') {
+        const elapsed = Date.now() - (lastServerPlayTriggerTime || 0);
         if (activePlayback && activePlayback.targetType === 'server') {
-          activePlayback = null;
-          hideFloatingPlayerBar();
-          updateAllPlayButtonsUI();
+          // If specific audio_code was stopped, only clear if it matches OR grace period elapsed
+          if (!data.audio_code || (activePlayback.code || '').toLowerCase() === (data.audio_code || '').toLowerCase() || elapsed > 2500) {
+            activePlayback = null;
+            hideFloatingPlayerBar();
+            updateAllPlayButtonsUI();
+          }
         }
       } else if (data.type === 'SERVER_AUDIO_STARTED') {
-        if (!activePlayback || activePlayback.targetType === 'server') {
-          activePlayback = {
-            targetType: 'server',
-            targetId: `srv-${data.audio_code}`,
-            code: data.audio_code,
-            name: data.audio_name,
-            schedId: null
-          };
-          updateAllPlayButtonsUI();
-          showFloatingPlayerBar('Speaker Server (Soundcard)', `[${data.audio_code}] ${data.audio_name}`);
-        }
+        const audioObj = (globalAudios || []).find(a => (a.code || '').toLowerCase() === (data.audio_code || '').toLowerCase());
+        activePlayback = {
+          targetType: 'server',
+          targetId: `srv-${data.audio_code}`,
+          code: data.audio_code,
+          name: audioObj ? audioObj.name : (data.audio_name || data.audio_code),
+          schedId: null
+        };
+        lastServerPlayTriggerTime = Date.now();
+        updateAllPlayButtonsUI();
+        showFloatingPlayerBar('Speaker Server (Soundcard)', `[${data.audio_code}] ${data.audio_name}`);
       } else if (data.type === 'BELL_RING') {
         // Live Bell Ring Event
         handleBellRingEvent(data);
@@ -1233,6 +1260,7 @@ async function loadAudios() {
 // 5. When the song finishes naturally, the button returns to ▶.
 
 let activePlayback = null;
+let lastServerPlayTriggerTime = 0;
 // Structure of activePlayback:
 // {
 //   targetType: 'sched' | 'web' | 'server',
@@ -1494,6 +1522,8 @@ async function handlePlayAudioServer(code) {
 
   const audio = globalAudios.find(a => a.code.toLowerCase() === code.toLowerCase());
   const audioName = audio ? audio.name : code;
+
+  lastServerPlayTriggerTime = Date.now();
 
   // 2. Register new active playback immediately (reverts previous song button to 🔊, sets this one to ⏹)
   activePlayback = {

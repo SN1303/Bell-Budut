@@ -106,10 +106,13 @@ func (p *windowsPlayer) Play(filePath string) error {
 	p.currentFile = absPath
 	p.isPlaying = true
 
-	// 3. Monitor playback end in a background goroutine
+	// 3. Monitor playback end in a background goroutine with debounce
 	go func(id uint64, targetAlias string) {
+		time.Sleep(300 * time.Millisecond)
 		ticker := time.NewTicker(250 * time.Millisecond)
 		defer ticker.Stop()
+
+		consecutiveNonPlaying := 0
 
 		for range ticker.C {
 			p.mu.Lock()
@@ -120,20 +123,26 @@ func (p *windowsPlayer) Play(filePath string) error {
 
 			status, err := p.sendMCI(fmt.Sprintf("status %s mode", targetAlias))
 			if err != nil || status != "playing" {
-				if p.playID == id {
-					p.isPlaying = false
-					p.currentFile = ""
-					p.currentAlias = ""
-					p.sendMCI(fmt.Sprintf("close %s", targetAlias))
-					onEndFn := p.onEnd
-					p.mu.Unlock()
-					if onEndFn != nil {
-						go onEndFn()
+				consecutiveNonPlaying++
+				if consecutiveNonPlaying >= 3 {
+					if p.playID == id {
+						p.isPlaying = false
+						p.currentFile = ""
+						p.currentAlias = ""
+						p.sendMCI(fmt.Sprintf("close %s", targetAlias))
+						onEndFn := p.onEnd
+						p.mu.Unlock()
+						if onEndFn != nil {
+							go onEndFn()
+						}
+						return
 					}
+					p.mu.Unlock()
 					return
 				}
-				p.mu.Unlock()
-				return
+			} else {
+				// Successfully confirmed "playing" state -> reset debounce counter
+				consecutiveNonPlaying = 0
 			}
 			p.mu.Unlock()
 		}
