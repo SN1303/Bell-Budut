@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"os"
 	"os/exec"
@@ -61,7 +62,9 @@ func (s *Server) Routes() http.Handler {
 	staticDir := filepath.Join("web", "static")
 	fileServer := http.FileServer(http.Dir(staticDir))
 	mux.Handle("/static/", http.StripPrefix("/static/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Cache-Control", "no-cache, must-revalidate")
+		w.Header().Set("Cache-Control", "no-cache, no-store, must-revalidate")
+		w.Header().Set("Pragma", "no-cache")
+		w.Header().Set("Expires", "0")
 		fileServer.ServeHTTP(w, r)
 	})))
 
@@ -127,7 +130,12 @@ func (s *Server) Routes() http.Handler {
 	// Logs
 	mux.HandleFunc("/api/logs", s.handleLogs)
 
-	return mux
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/events" {
+			log.Printf("[HTTP] %s %s from %s", r.Method, r.URL.Path, r.RemoteAddr)
+		}
+		mux.ServeHTTP(w, r)
+	})
 }
 
 // ----------------- AUTH HELPERS -----------------
@@ -306,11 +314,17 @@ func (s *Server) handleIndex(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, r)
 		return
 	}
+	w.Header().Set("Cache-Control", "no-cache, no-store, must-revalidate")
+	w.Header().Set("Pragma", "no-cache")
+	w.Header().Set("Expires", "0")
 	tmplPath := filepath.Join("web", "templates", "index.html")
 	http.ServeFile(w, r, tmplPath)
 }
 
 func (s *Server) handleKiosk(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Cache-Control", "no-cache, no-store, must-revalidate")
+	w.Header().Set("Pragma", "no-cache")
+	w.Header().Set("Expires", "0")
 	tmplPath := filepath.Join("web", "templates", "kiosk.html")
 	http.ServeFile(w, r, tmplPath)
 }
