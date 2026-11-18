@@ -67,6 +67,7 @@ func (s *Server) Routes() http.Handler {
 
 	// Audio Streaming & Management
 	mux.HandleFunc("/api/audio/stream/", s.handleAudioStream)
+	mux.HandleFunc("/api/audio/folder/", s.handleAudioFolder)
 	mux.HandleFunc("/api/audio", s.handleAudioList)
 	mux.HandleFunc("/api/audio/upload", s.requireAuth(s.handleAudioUpload))
 	mux.HandleFunc("/api/audio/delete/", s.requireAuth(s.handleAudioDelete))
@@ -168,6 +169,18 @@ func (s *Server) requireAuth(next http.HandlerFunc) http.HandlerFunc {
 		}
 		next(w, r)
 	}
+}
+
+func (s *Server) checkAuth(r *http.Request) bool {
+	cookie, err := r.Cookie("bell_auth")
+	var token string
+	if err == nil {
+		token = cookie.Value
+	}
+	if token == "" {
+		token = r.Header.Get("X-Admin-Token")
+	}
+	return s.isValidSession(token)
 }
 
 func (s *Server) handleAuthStatus(w http.ResponseWriter, r *http.Request) {
@@ -341,10 +354,17 @@ func (s *Server) handleAudioStream(w http.ResponseWriter, r *http.Request) {
 	}
 
 	rawPath := filepath.Join(s.audioDir, audioFile.Filename)
-	resolvedPath, _, err := s.audioMgr.ResolvePlayPath(rawPath, audioFile.Name)
-	if err != nil {
-		http.NotFound(w, r)
-		return
+	var resolvedPath string
+	specificFile := strings.TrimSpace(r.URL.Query().Get("file"))
+	if specificFile != "" && audioFile.IsFolder {
+		cleanName := filepath.Base(specificFile)
+		resolvedPath = filepath.Join(rawPath, cleanName)
+	} else {
+		resolvedPath, _, err = s.audioMgr.ResolvePlayPath(rawPath, audioFile.Name)
+		if err != nil {
+			http.NotFound(w, r)
+			return
+		}
 	}
 
 	f, err := os.Open(resolvedPath)
@@ -398,10 +418,76 @@ func (s *Server) handleAudioUpload(w http.ResponseWriter, r *http.Request) {
 	customName := strings.TrimSpace(r.FormValue("name"))
 	customDesc := strings.TrimSpace(r.FormValue("description"))
 
+	targetFolderCode := strings.TrimSpace(r.FormValue("target_folder_code"))
 	asFolder := r.FormValue("as_folder") == "true" || r.FormValue("as_folder") == "on"
 	folderName := strings.TrimSpace(r.FormValue("folder_name"))
 
-	// Option A: Save as 1 Random Shuffle Folder (FLD-XX)
+	// Option A1: Add into an EXISTING Folder Playlist (e.g. FLD-01)
+	if targetFolderCode != "" {
+		folderAudio, err := s.db.GetAudioByCode(targetFolderCode)
+		if err != nil || !folderAudio.IsFolder {
+			s.jsonError(w, "Folder audio tujuan tidak ditemukan", http.StatusBadRequest)
+			return
+		}
+		folderAbs := filepath.Join(s.audioDir, folderAudio.Filename)
+		if err := os.MkdirAll(folderAbs, 0755); err != nil {
+			s.jsonError(w, "Gagal mengakses folder di server: "+err.Error(), http.StatusInternalServerError)
+			return
+		}
+
+		savedCount := 0
+		for _, header := range fileHeaders {
+			ext := strings.ToLower(filepath.Ext(header.Filename))
+			if ext != ".mp3" && ext != ".wav" && ext != ".ogg" {
+				continue
+			}
+			file, err := header.Open()
+			if err != nil {
+				continue
+			}
+			cleanName := filepath.Base(header.Filename)
+			targetFile := filepath.Join(folderAbs, cleanName)
+			out, err := os.Create(targetFile)
+			if err != nil {
+				file.Close()
+				continue
+			}
+			_, copyErr := io.Copy(out, file)
+			out.Close()
+			file.Close()
+			if copyErr == nil {
+				savedCount++
+			}
+		}
+
+		if savedCount == 0 {
+			s.jsonError(w, "Tidak ada file audio valid yang berhasil disimpan ke dalam folder", http.StatusBadRequest)
+			return
+		}
+
+		totalFiles := 0
+		if entries, err := os.ReadDir(folderAbs); err == nil {
+			for _, e := range entries {
+				if !e.IsDir() {
+					ext := strings.ToLower(filepath.Ext(e.Name()))
+					if ext == ".mp3" || ext == ".wav" || ext == ".ogg" {
+						totalFiles++
+					}
+				}
+			}
+		}
+
+		s.jsonSuccess(w, map[string]interface{}{
+			"count":       savedCount,
+			"total_count": totalFiles,
+			"code":        folderAudio.Code,
+			"is_folder":   true,
+			"messages":    fmt.Sprintf("Berhasil menambahkan %d lagu ke %s (Total: %d lagu)", savedCount, folderAudio.Name, totalFiles),
+		})
+		return
+	}
+
+	// Option A2: Save as a NEW Random Shuffle Folder (FLD-XX)
 	if asFolder {
 		if folderName == "" {
 			folderName = customName
@@ -577,6 +663,110 @@ func (s *Server) handleAudioDelete(w http.ResponseWriter, r *http.Request) {
 	}
 
 	s.jsonSuccess(w, "Audio berhasil dihapus")
+}
+
+type FolderFileInfo struct {
+	Name      string `json:"name"`
+	Title     string `json:"title"`
+	SizeBytes int64  `json:"size_bytes"`
+	SizeFmt   string `json:"size_fmt"`
+}
+
+func formatBytes(bytes int64) string {
+	const unit = 1024
+	if bytes < unit {
+		return fmt.Sprintf("%d B", bytes)
+	}
+	div, exp := int64(unit), 0
+	for n := bytes / unit; n >= unit; n /= unit {
+		div *= unit
+		exp++
+	}
+	return fmt.Sprintf("%.1f %cB", float64(bytes)/float64(div), "KMGTPE"[exp])
+}
+
+func (s *Server) handleAudioFolder(w http.ResponseWriter, r *http.Request) {
+	// Path format: /api/audio/folder/{code} or /api/audio/folder/{code}/file
+	subPath := strings.TrimPrefix(r.URL.Path, "/api/audio/folder/")
+	parts := strings.Split(strings.Trim(subPath, "/"), "/")
+	if len(parts) == 0 || parts[0] == "" {
+		s.jsonError(w, "Kode folder tidak valid", http.StatusBadRequest)
+		return
+	}
+
+	code := parts[0]
+	folderAudio, err := s.db.GetAudioByCode(code)
+	if err != nil || !folderAudio.IsFolder {
+		s.jsonError(w, "Folder audio tidak ditemukan", http.StatusNotFound)
+		return
+	}
+
+	folderAbs := filepath.Join(s.audioDir, folderAudio.Filename)
+
+	// DELETE /api/audio/folder/{code}/file?name=xxx
+	if len(parts) >= 2 && parts[1] == "file" && (r.Method == http.MethodDelete || r.Method == http.MethodPost) {
+		if !s.checkAuth(r) {
+			s.jsonError(w, "Perlu PIN Admin", http.StatusUnauthorized)
+			return
+		}
+		fileName := strings.TrimSpace(r.URL.Query().Get("name"))
+		if fileName == "" {
+			s.jsonError(w, "Nama file tidak valid", http.StatusBadRequest)
+			return
+		}
+		cleanName := filepath.Base(fileName)
+		targetPath := filepath.Join(folderAbs, cleanName)
+		if err := os.Remove(targetPath); err != nil {
+			s.jsonError(w, "Gagal menghapus file: "+err.Error(), http.StatusInternalServerError)
+			return
+		}
+		s.jsonSuccess(w, fmt.Sprintf("Lagu '%s' berhasil dihapus dari folder", cleanName))
+		return
+	}
+
+	// GET /api/audio/folder/{code} -> List songs in folder
+	if r.Method == http.MethodGet {
+		entries, err := os.ReadDir(folderAbs)
+		if err != nil {
+			s.jsonError(w, "Gagal membaca folder: "+err.Error(), http.StatusInternalServerError)
+			return
+		}
+
+		var files []FolderFileInfo
+		for _, e := range entries {
+			if e.IsDir() {
+				continue
+			}
+			ext := strings.ToLower(filepath.Ext(e.Name()))
+			if ext != ".mp3" && ext != ".wav" && ext != ".ogg" {
+				continue
+			}
+			info, err := e.Info()
+			size := int64(0)
+			if err == nil {
+				size = info.Size()
+			}
+			cleanTitle := strings.TrimSuffix(e.Name(), filepath.Ext(e.Name()))
+			files = append(files, FolderFileInfo{
+				Name:      e.Name(),
+				Title:     cleanTitle,
+				SizeBytes: size,
+				SizeFmt:   formatBytes(size),
+			})
+		}
+
+		s.jsonSuccess(w, map[string]interface{}{
+			"code":        folderAudio.Code,
+			"name":        folderAudio.Name,
+			"folder_name": folderAudio.Filename,
+			"description": folderAudio.Description,
+			"count":       len(files),
+			"files":       files,
+		})
+		return
+	}
+
+	s.jsonError(w, "Metode tidak valid", http.StatusMethodNotAllowed)
 }
 
 func (s *Server) handleAudioTestServer(w http.ResponseWriter, r *http.Request) {

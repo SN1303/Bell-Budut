@@ -1124,6 +1124,16 @@ async function deleteSchedule(id) {
 
 // ==================== AUDIO MANAGEMENT ====================
 
+function escapeHtml(str) {
+  if (!str) return '';
+  return String(str)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
 async function loadAudios() {
   try {
     const res = await fetch('/api/audio');
@@ -1156,7 +1166,14 @@ async function loadAudios() {
           ${a.is_folder ? '<span class="ml-1.5 px-2 py-0.5 rounded text-xs bg-amber-200 text-amber-900 font-bold">FOLDER ACAK</span>' : ''}
         </td>
         <td class="py-3 px-4 font-semibold text-gray-800">
-          ${a.is_folder ? '📁 ' : ''}${a.name}
+          <div class="flex items-center gap-2 flex-wrap">
+            <span>${a.is_folder ? '📁 ' : ''}${escapeHtml(a.name)}</span>
+            ${a.is_folder ? `
+              <button onclick="openFolderManageModal('${a.code}', '${escapeHtml(a.name)}')" class="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-bold bg-amber-200 hover:bg-amber-300 text-amber-950 border border-amber-400 shadow-xs transition cursor-pointer">
+                <span>📂</span><span>Kelola Isi Lagu</span>
+              </button>
+            ` : ''}
+          </div>
         </td>
         <td class="py-3 px-4 text-xs font-mono text-gray-500">${a.filename}</td>
         <td class="py-3 px-4 text-xs text-gray-500">${a.description || '-'}</td>
@@ -1530,25 +1547,66 @@ function handleAudioFilesSelected(files) {
   renderSelectedAudioFiles();
 }
 
+function populateTargetFolderSelect() {
+  const sel = document.getElementById('selectTargetFolderCode');
+  if (!sel) return;
+  sel.innerHTML = '';
+  const folders = (globalAudios || []).filter(a => a.is_folder);
+  if (folders.length === 0) {
+    const opt = document.createElement('option');
+    opt.value = '';
+    opt.innerText = '(Belum ada folder playlist, buat baru)';
+    sel.appendChild(opt);
+    return;
+  }
+  folders.forEach(f => {
+    const opt = document.createElement('option');
+    opt.value = f.code;
+    opt.innerText = `[${f.code}] ${f.name}`;
+    sel.appendChild(opt);
+  });
+}
+
+function toggleFolderModeUI() {
+  const isExisting = document.getElementById('radFolderModeExisting')?.checked;
+  const divExisting = document.getElementById('divSelectExistingFolder');
+  const divNew = document.getElementById('divInputNewFolder');
+  if (isExisting) {
+    if (divExisting) divExisting.classList.remove('hidden');
+    if (divNew) divNew.classList.add('hidden');
+  } else {
+    if (divExisting) divExisting.classList.add('hidden');
+    if (divNew) divNew.classList.remove('hidden');
+    document.getElementById('uploadFolderName')?.focus();
+  }
+}
+
 function toggleAsFolderUI() {
   const chk = document.getElementById('chkAsFolder');
   const divDetails = document.getElementById('divFolderDetails');
   const multiBadge = document.getElementById('multiAudioBadge');
   const btnText = document.getElementById('btnSubmitAudioUploadText');
-  const folderNameInput = document.getElementById('uploadFolderName');
+  const singleFields = document.getElementById('singleAudioFields');
+
+  populateTargetFolderSelect();
 
   if (chk && chk.checked) {
     if (divDetails) divDetails.classList.remove('hidden');
     if (multiBadge) multiBadge.classList.add('hidden');
-    if (btnText) btnText.innerText = `Satukan Jadi Folder Acak (${selectedAudioFileList.length} Lagu)`;
-    if (folderNameInput && !folderNameInput.value) {
-      folderNameInput.value = 'Lagu Daerah & Nasional';
-    }
-    if (folderNameInput) folderNameInput.focus();
+    if (singleFields) singleFields.classList.add('hidden');
+    if (btnText) btnText.innerText = `Simpan ke Folder Playlist (${selectedAudioFileList.length} Lagu)`;
+    toggleFolderModeUI();
   } else {
     if (divDetails) divDetails.classList.add('hidden');
-    if (multiBadge) multiBadge.classList.remove('hidden');
-    if (btnText) btnText.innerText = `Upload ${selectedAudioFileList.length} Lagu Sekaligus`;
+    if (selectedAudioFileList.length === 1) {
+      if (singleFields) singleFields.classList.remove('hidden');
+      if (multiBadge) multiBadge.classList.add('hidden');
+      if (btnText) btnText.innerText = 'Upload 1 Lagu';
+    } else {
+      if (singleFields) singleFields.classList.add('hidden');
+      if (multiBadge) multiBadge.classList.remove('hidden');
+      if (btnText) btnText.innerText = `Upload ${selectedAudioFileList.length} Lagu Sekaligus`;
+    }
   }
 }
 
@@ -1583,23 +1641,27 @@ function renderSelectedAudioFiles() {
     const item = document.createElement('div');
     item.className = 'py-1 flex items-center justify-between text-[11px] text-gray-700';
     item.innerHTML = `
-      <span class="truncate max-w-[280px]" title="${f.name}">🎵 <b>${idx + 1}.</b> ${f.name}</span>
+      <span class="truncate max-w-[280px]" title="${escapeHtml(f.name)}">🎵 <b>${idx + 1}.</b> ${escapeHtml(f.name)}</span>
       <span class="text-gray-400 font-mono text-[10px] ml-2 flex-shrink-0">${sizeMB} MB</span>
     `;
     list.appendChild(item);
   });
 
+  if (divAsFolder) divAsFolder.classList.remove('hidden');
+
   if (selectedAudioFileList.length === 1) {
-    if (singleFields) singleFields.classList.remove('hidden');
-    if (multiBadge) multiBadge.classList.add('hidden');
-    if (divAsFolder) divAsFolder.classList.add('hidden');
-    if (nameInput && !nameInput.value) {
-      nameInput.value = selectedAudioFileList[0].name.replace(/\.[^/.]+$/, '');
+    const chk = document.getElementById('chkAsFolder');
+    if (!chk || !chk.checked) {
+      if (singleFields) singleFields.classList.remove('hidden');
+      if (multiBadge) multiBadge.classList.add('hidden');
+      if (nameInput && !nameInput.value) {
+        nameInput.value = selectedAudioFileList[0].name.replace(/\.[^/.]+$/, '');
+      }
+      if (btnText) btnText.innerText = 'Upload 1 Lagu';
+    } else {
+      toggleAsFolderUI();
     }
-    if (btnText) btnText.innerText = 'Upload 1 Lagu';
   } else {
-    if (singleFields) singleFields.classList.add('hidden');
-    if (divAsFolder) divAsFolder.classList.remove('hidden');
     toggleAsFolderUI();
   }
 }
@@ -1619,16 +1681,26 @@ async function submitAudioUpload(e) {
   }
 
   const isFolder = document.getElementById('chkAsFolder')?.checked;
-  const folderName = document.getElementById('uploadFolderName')?.value.trim();
 
-  if (isFolder && selectedAudioFileList.length > 1) {
-    if (!folderName) {
-      showToast('Silakan ketik nama folder lagu acak terlebih dahulu!', 'warning');
-      document.getElementById('uploadFolderName')?.focus();
-      return;
+  if (isFolder) {
+    const isExisting = document.getElementById('radFolderModeExisting')?.checked;
+    if (isExisting) {
+      const targetCode = document.getElementById('selectTargetFolderCode')?.value;
+      if (!targetCode) {
+        showToast('Pilih folder playlist tujuan terlebih dahulu!', 'warning');
+        return;
+      }
+      formData.append('target_folder_code', targetCode);
+    } else {
+      const folderName = document.getElementById('uploadFolderName')?.value.trim();
+      if (!folderName) {
+        showToast('Silakan ketik nama folder lagu acak terlebih dahulu!', 'warning');
+        document.getElementById('uploadFolderName')?.focus();
+        return;
+      }
+      formData.append('as_folder', 'true');
+      formData.append('folder_name', folderName);
     }
-    formData.append('as_folder', 'true');
-    formData.append('folder_name', folderName);
   } else if (selectedAudioFileList.length === 1) {
     const name = document.getElementById('uploadAudioName')?.value.trim();
     const desc = document.getElementById('uploadAudioDesc')?.value.trim();
@@ -1637,7 +1709,6 @@ async function submitAudioUpload(e) {
   }
 
   const btn = document.getElementById('btnSubmitAudioUpload');
-  const origBtnContent = btn ? btn.innerHTML : '';
   if (btn) {
     btn.disabled = true;
     btn.innerHTML = `<span>⏳</span><span>Memproses ${selectedAudioFileList.length} lagu...</span>`;
@@ -1651,7 +1722,7 @@ async function submitAudioUpload(e) {
     const json = await res.json();
     if (json.success) {
       if (json.data && json.data.is_folder) {
-        showToast(`✅ Berhasil membuat Folder Lagu Acak [${json.data.code}] berisi ${json.data.count} lagu!`, 'success');
+        showToast(`✅ ${json.data.messages || 'Folder Playlist berhasil diperbarui!'}`, 'success');
       } else {
         const cnt = json.data.count || 1;
         showToast(`✅ Berhasil mengunggah ${cnt} lagu audio baru!`, 'success');
@@ -1668,12 +1739,12 @@ async function submitAudioUpload(e) {
       showToast('Gagal mengunggah file (Koneksi terputus / Sesi Admin berakhir). Silakan masukkan PIN Admin kembali lalu coba lagi.', 'error');
       handleAuthClick();
     } else {
-      showToast('Terjadi kesalahan saat mengunggah: ' + err.message, 'error');
+      showToast('Gagal mengunggah ke server: ' + err.message, 'error');
     }
   } finally {
     if (btn) {
       btn.disabled = false;
-      btn.innerHTML = origBtnContent;
+      btn.innerHTML = `<span>🚀</span><span id="btnSubmitAudioUploadText">Upload Lagu Sekarang</span>`;
     }
   }
 }
@@ -1692,6 +1763,173 @@ async function deleteAudio(id) {
       showToast(json.error, 'error');
     }
   } catch (err) {}
+}
+
+// ==================== FOLDER SHUFFLE PLAYLIST MANAGEMENT ====================
+let currentManageFolderCode = null;
+
+async function openFolderManageModal(code, name) {
+  currentManageFolderCode = code;
+  const title = document.getElementById('folderManageTitle');
+  const sub = document.getElementById('folderManageSubtitle');
+  if (title) title.innerText = `Kelola Lagu: [${code}] ${name}`;
+  if (sub) sub.innerText = `Daftar lagu di folder playlist [${code}]. Sistem akan memutar salah satu lagunya secara acak saat bel berbunyi.`;
+
+  const fileInput = document.getElementById('folderManageFileInput');
+  if (fileInput) fileInput.value = '';
+
+  openModal('modalFolderManage');
+  await reloadFolderSongs(code);
+}
+
+async function reloadFolderSongs(code) {
+  const tbody = document.getElementById('folderManageTableBody');
+  const countEl = document.getElementById('folderManageSongCount');
+  if (!tbody) return;
+
+  tbody.innerHTML = `<tr><td colspan="5" class="py-6 text-center text-gray-400">Memuat daftar lagu...</td></tr>`;
+
+  try {
+    const res = await fetch(`/api/audio/folder/${encodeURIComponent(code)}`);
+    const json = await res.json();
+    if (!json.success || !json.data) {
+      tbody.innerHTML = `<tr><td colspan="5" class="py-6 text-center text-red-500">Gagal memuat isi folder</td></tr>`;
+      return;
+    }
+
+    const files = json.data.files || [];
+    if (countEl) countEl.innerText = `Total: ${files.length} lagu di folder ini`;
+
+    if (files.length === 0) {
+      tbody.innerHTML = `<tr><td colspan="5" class="py-6 text-center text-gray-400 italic">Belum ada lagu di dalam folder ini. Silakan unggah lagu di atas.</td></tr>`;
+      return;
+    }
+
+    tbody.innerHTML = '';
+    files.forEach((f, idx) => {
+      const tr = document.createElement('tr');
+      tr.className = 'hover:bg-amber-50/60 transition';
+      tr.innerHTML = `
+        <td class="py-2.5 px-3 text-center text-gray-500 font-mono">${idx + 1}</td>
+        <td class="py-2.5 px-3 font-medium text-gray-800">
+          <div class="truncate max-w-[280px]" title="${escapeHtml(f.name)}">🎵 ${escapeHtml(f.name)}</div>
+        </td>
+        <td class="py-2.5 px-3 text-center text-gray-500 font-mono text-[11px]">${f.size_fmt}</td>
+        <td class="py-2.5 px-3 text-center">
+          <button onclick="playSpecificFolderSong('${code}', '${escapeHtml(f.name)}')" class="px-2.5 py-1 bg-amber-200 hover:bg-amber-300 text-amber-900 rounded-lg text-xs font-semibold transition cursor-pointer">
+            ▶ Dengar
+          </button>
+        </td>
+        <td class="py-2.5 px-3 text-right">
+          <button onclick="deleteFolderSong('${code}', '${escapeHtml(f.name)}')" class="text-red-600 hover:text-red-800 font-semibold text-xs transition cursor-pointer">
+            Hapus
+          </button>
+        </td>
+      `;
+      tbody.appendChild(tr);
+    });
+
+  } catch (err) {
+    tbody.innerHTML = `<tr><td colspan="5" class="py-6 text-center text-red-500">Terjadi kesalahan: ${err.message}</td></tr>`;
+  }
+}
+
+async function uploadFilesToCurrentFolder() {
+  if (!currentManageFolderCode) return;
+  if (!requireAdmin('menambah lagu ke folder')) return;
+
+  const input = document.getElementById('folderManageFileInput');
+  if (!input || !input.files || input.files.length === 0) {
+    showToast('Pilih minimal 1 file lagu (.mp3, .wav) terlebih dahulu!', 'warning');
+    return;
+  }
+
+  const files = Array.from(input.files).filter(f => {
+    const ext = f.name.toLowerCase();
+    return ext.endsWith('.mp3') || ext.endsWith('.wav') || ext.endsWith('.ogg');
+  });
+
+  if (files.length === 0) {
+    showToast('Format file harus .mp3, .wav, atau .ogg!', 'warning');
+    return;
+  }
+
+  const btn = document.getElementById('btnUploadToFolder');
+  if (btn) {
+    btn.disabled = true;
+    btn.innerText = `Mengunggah ${files.length} lagu...`;
+  }
+
+  const formData = new FormData();
+  files.forEach(f => formData.append('audio_files', f));
+  formData.append('target_folder_code', currentManageFolderCode);
+
+  try {
+    const res = await authFetch('/api/audio/upload', {
+      method: 'POST',
+      body: formData
+    });
+    const json = await res.json();
+    if (json.success) {
+      showToast(`✅ ${json.data.messages || 'Lagu berhasil ditambahkan!'}`, 'success');
+      input.value = '';
+      await reloadFolderSongs(currentManageFolderCode);
+      loadAudios();
+    } else {
+      showToast(json.error || 'Gagal menambahkan lagu', 'error');
+    }
+  } catch (err) {
+    showToast('Gagal mengunggah ke server: ' + err.message, 'error');
+  } finally {
+    if (btn) {
+      btn.disabled = false;
+      btn.innerText = 'Unggah Lagu';
+    }
+  }
+}
+
+async function deleteFolderSong(code, fileName) {
+  if (!requireAdmin('menghapus lagu dari folder')) return;
+  if (!confirm(`Hapus lagu "${fileName}" dari folder ${code}?`)) return;
+
+  try {
+    const res = await authFetch(`/api/audio/folder/${encodeURIComponent(code)}/file?name=${encodeURIComponent(fileName)}`, {
+      method: 'DELETE'
+    });
+    const json = await res.json();
+    if (json.success) {
+      showToast(json.data || 'Lagu berhasil dihapus dari folder', 'success');
+      await reloadFolderSongs(code);
+      loadAudios();
+    } else {
+      showToast(json.error || 'Gagal menghapus lagu', 'error');
+    }
+  } catch (err) {
+    showToast('Gagal menghapus lagu: ' + err.message, 'error');
+  }
+}
+
+async function playSpecificFolderSong(code, fileName) {
+  stopAnyActivePlayback();
+
+  activePlayback = {
+    code: code,
+    type: 'web',
+    name: fileName
+  };
+  showFloatingPlayerBar('Browser Web (Preview Lagu)', `[${code}] ${fileName}`);
+
+  audioPlayer.onended = () => {
+    activePlayback = null;
+    hideFloatingPlayerBar();
+  };
+
+  try {
+    audioPlayer.src = `/api/audio/stream/${encodeURIComponent(code)}?file=${encodeURIComponent(fileName)}&t=${Date.now()}`;
+    await audioPlayer.play();
+  } catch (err) {
+    console.warn('Playback interrupted:', err);
+  }
 }
 
 // ==================== QUICK TRIGGERS & EMERGENCY ====================
