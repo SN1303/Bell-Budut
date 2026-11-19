@@ -73,8 +73,6 @@ func (p *windowsPlayer) Play(filePath string) error {
 		p.sendMCI(fmt.Sprintf("close %s", p.currentAlias))
 		p.currentAlias = ""
 	}
-	p.sendMCI("stop all")
-	p.sendMCI("close all")
 	p.isPlaying = false
 	p.currentFile = ""
 
@@ -86,16 +84,21 @@ func (p *windowsPlayer) Play(filePath string) error {
 	// 2. Generate unique alias per playID to avoid device locked / name conflicts
 	alias := fmt.Sprintf("bell_dev_%d", currentID)
 
-	openCmd := fmt.Sprintf(`open "%s" alias %s`, absPath, alias)
+	ext := strings.ToLower(filepath.Ext(absPath))
+	var openCmd string
+	if ext == ".mp3" {
+		openCmd = fmt.Sprintf(`open "%s" type mpegvideo alias %s`, absPath, alias)
+	} else if ext == ".wav" {
+		openCmd = fmt.Sprintf(`open "%s" type waveaudio alias %s`, absPath, alias)
+	} else {
+		openCmd = fmt.Sprintf(`open "%s" alias %s`, absPath, alias)
+	}
+
 	if _, err := p.sendMCI(openCmd); err != nil {
-		ext := strings.ToLower(filepath.Ext(absPath))
-		if ext == ".mp3" {
-			openCmd = fmt.Sprintf(`open "%s" type mpegvideo alias %s`, absPath, alias)
-		} else if ext == ".wav" {
-			openCmd = fmt.Sprintf(`open "%s" type waveaudio alias %s`, absPath, alias)
-		}
+		// Fallback without explicit type
+		openCmd = fmt.Sprintf(`open "%s" alias %s`, absPath, alias)
 		if _, err2 := p.sendMCI(openCmd); err2 != nil {
-			return fmt.Errorf("gagal membuka audio: %w", err2)
+			return fmt.Errorf("gagal membuka audio (%s): %w", absPath, err2)
 		}
 	}
 

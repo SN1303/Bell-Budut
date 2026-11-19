@@ -1501,10 +1501,6 @@ async function handlePlayAudioServer(code) {
 
   // Silence any browser audio first
   stopBrowserAudio();
-  // If another server track was playing, stop it cleanly
-  if (activePlayback && activePlayback.targetType === 'server') {
-    fetch('/api/audio/stop-server', { method: 'POST' }).catch(() => {});
-  }
 
   const audio = (globalAudios || []).find(a => (a.code || '').toLowerCase() === normCode);
   const audioName = audio ? audio.name : code;
