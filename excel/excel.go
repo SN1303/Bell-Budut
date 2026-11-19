@@ -101,6 +101,8 @@ func GenerateTemplate(audios []database.AudioFile, groups []database.Group, targ
 		"Kode Audio (Auto)",
 		"Status",
 		"Keterangan",
+		"Audio Lanjutan 1 (Setelah Bel Selesai)",
+		"Audio Lanjutan 2 (Setelah Lanjutan 1)",
 	}
 
 	for i, h := range schedHeaders {
@@ -138,7 +140,7 @@ func GenerateTemplate(audios []database.AudioFile, groups []database.Group, targ
 		{defaultGroup, "SENIN", "06:55", "Persiapan Pendidikan Karakter", sampleAudio1, "", "AKTIF", "Siswa masuk kelas"},
 		{defaultGroup, "SENIN", "07:00", "Pendidikan Karakter Dimulai", sampleAudio2, "", "AKTIF", "Doa bersama"},
 		{defaultGroup, "SENIN", "09:45", "Istirahat Pertama", sampleAudio3, "", "AKTIF", "Istirahat 30 menit"},
-		{defaultGroup, "SENIN - JUMAT", "15:30", "Bel Pulang Sekolah", sampleAudio4, "", "AKTIF", "Selesai KBM"},
+		{defaultGroup, "SENIN - JUMAT", "15:30", "Bel Pulang Sekolah", sampleAudio4, "", "AKTIF", "Selesai KBM", ""},
 		{defaultGroup, "JUMAT", "11:30", "Shalat Jumat / Pulang Jumat", sampleAudio4, "", "AKTIF", "Khusus Jumat"},
 	}
 
@@ -165,6 +167,7 @@ func GenerateTemplate(audios []database.AudioFile, groups []database.Group, targ
 	f.SetColWidth(sheetSchedules, "F", "F", 20)
 	f.SetColWidth(sheetSchedules, "G", "G", 14)
 	f.SetColWidth(sheetSchedules, "H", "H", 28)
+	f.SetColWidth(sheetSchedules, "I", "J", 38)
 
 	// 3. Data Validations
 	// Day dropdown (Col B)
@@ -179,6 +182,12 @@ func GenerateTemplate(audios []database.AudioFile, groups []database.Group, targ
 		dvAudio.Sqref = "E2:E500"
 		dvAudio.SetSqrefDropList(fmt.Sprintf("'Daftar Audio'!$A$2:$A$%d", len(audios)+1))
 		_ = f.AddDataValidation(sheetSchedules, dvAudio)
+
+		// Follow-up audio dropdown (Col I) - optional, leave empty for none
+		dvNext := excelize.NewDataValidation(true)
+		dvNext.Sqref = "I2:J500"
+		dvNext.SetSqrefDropList(fmt.Sprintf("'Daftar Audio'!$A$2:$A$%d", len(audios)+1))
+		_ = f.AddDataValidation(sheetSchedules, dvNext)
 	}
 
 	// Status dropdown (Col G)
@@ -260,6 +269,8 @@ func ExportSchedules(schedules []database.Schedule, audios []database.AudioFile,
 		"Kode Audio (Auto)",
 		"Status",
 		"Keterangan",
+		"Audio Lanjutan 1 (Setelah Bel Selesai)",
+		"Audio Lanjutan 2 (Setelah Lanjutan 1)",
 	}
 
 	for i, h := range schedHeaders {
@@ -301,6 +312,15 @@ func ExportSchedules(schedules []database.Schedule, audios []database.AudioFile,
 		f.SetCellValue(sheetSchedules, fmt.Sprintf("F%d", row), s.AudioCode)
 		f.SetCellValue(sheetSchedules, fmt.Sprintf("G%d", row), statusStr)
 		f.SetCellValue(sheetSchedules, fmt.Sprintf("H%d", row), s.Notes)
+		// Follow-up chain: one audio per column starting at I
+		for ni, nc := range database.SplitAudioCodes(s.NextAudioCode) {
+			nextName := codeToName[nc]
+			if nextName == "" {
+				nextName = nc
+			}
+			cell, _ := excelize.CoordinatesToCellName(9+ni, row)
+			f.SetCellValue(sheetSchedules, cell, nextName)
+		}
 	}
 
 	f.SetColWidth(sheetSchedules, "A", "A", 20)
@@ -311,6 +331,7 @@ func ExportSchedules(schedules []database.Schedule, audios []database.AudioFile,
 	f.SetColWidth(sheetSchedules, "F", "F", 20)
 	f.SetColWidth(sheetSchedules, "G", "G", 14)
 	f.SetColWidth(sheetSchedules, "H", "H", 28)
+	f.SetColWidth(sheetSchedules, "I", "J", 38)
 
 	f.SetActiveSheet(0)
 
@@ -417,6 +438,7 @@ func ImportSchedules(db *database.DB, data []byte, groupMode string, targetGroup
 		Time      string
 		Title     string
 		AudioCode string
+		NextCode  string
 		Notes     string
 		IsEnabled bool
 		LineNum   int
@@ -437,6 +459,7 @@ func ImportSchedules(db *database.DB, data []byte, groupMode string, targetGroup
 		// 7 columns layout (Old):
 		// Col 0: Grup | Col 1: Hari | Col 2: Waktu | Col 3: Nama Jadwal | Col 4: Kode Audio | Col 5: Status | Col 6: Keterangan
 		var groupName, dayStr, timeStr, title, audioName, audioCode, statusStr, notes string
+		var nextAudioStrs []string
 
 		if len(row) >= 8 {
 			groupName = getCol(row, 0)
@@ -447,6 +470,12 @@ func ImportSchedules(db *database.DB, data []byte, groupMode string, targetGroup
 			audioCode = strings.ToUpper(strings.TrimSpace(getCol(row, 5)))
 			statusStr = strings.ToUpper(getCol(row, 6))
 			notes = getCol(row, 7)
+			// optional Col 8+ : Audio Lanjutan 1, 2, ... (a cell may also hold "A, B")
+			for ci := 8; ci < len(row); ci++ {
+				if v := getCol(row, ci); v != "" {
+					nextAudioStrs = append(nextAudioStrs, v)
+				}
+			}
 		} else {
 			groupName = getCol(row, 0)
 			dayStr = strings.ToUpper(getCol(row, 1))
@@ -527,6 +556,29 @@ func ImportSchedules(db *database.DB, data []byte, groupMode string, targetGroup
 			report.Messages = append(report.Messages, fmt.Sprintf("Baris %d peringatan: Nada '%s' / '%s' tidak ditemukan di database, dialihkan ke AUD-01.", lineNum, audioName, audioCode))
 		}
 
+		// Resolve optional follow-up audio (by name or code)
+		var nextCodes []string
+		for _, nv := range nextAudioStrs {
+			if c, ok := audioNameToCode[strings.ToLower(nv)]; ok { // whole cell is one audio name
+				nextCodes = append(nextCodes, c)
+				continue
+			}
+			for _, part := range strings.FieldsFunc(nv, func(r rune) bool { return r == ',' || r == ';' || r == '|' }) {
+				part = strings.TrimSpace(part)
+				if part == "" {
+					continue
+				}
+				if audioCodeMap[strings.ToUpper(part)] {
+					nextCodes = append(nextCodes, strings.ToUpper(part))
+				} else if c, ok := audioNameToCode[strings.ToLower(part)]; ok {
+					nextCodes = append(nextCodes, c)
+				} else {
+					report.Messages = append(report.Messages, fmt.Sprintf("Baris %d peringatan: Audio lanjutan '%s' tidak ditemukan, diabaikan.", lineNum, part))
+				}
+			}
+		}
+		nextCode := database.JoinAudioCodes(nextCodes)
+
 		// Resolve Group ID:
 		var gID int64
 		if (groupMode == "specific" || groupMode == "new") && targetGroupID > 0 {
@@ -566,6 +618,7 @@ func ImportSchedules(db *database.DB, data []byte, groupMode string, targetGroup
 			Time:      timeStr,
 			Title:     title,
 			AudioCode: resolvedCode,
+			NextCode:  nextCode,
 			Notes:     notes,
 			IsEnabled: isEnabled,
 			LineNum:   lineNum,
@@ -584,13 +637,14 @@ func ImportSchedules(db *database.DB, data []byte, groupMode string, targetGroup
 
 	for _, vr := range validRows {
 		_, err := db.CreateSchedule(&database.Schedule{
-			GroupID:   vr.GroupID,
-			DayOfWeek: vr.Day,
-			Time:      vr.Time,
-			Title:     vr.Title,
-			AudioCode: vr.AudioCode,
-			Notes:     vr.Notes,
-			IsEnabled: vr.IsEnabled,
+			GroupID:       vr.GroupID,
+			DayOfWeek:     vr.Day,
+			Time:          vr.Time,
+			Title:         vr.Title,
+			AudioCode:     vr.AudioCode,
+			NextAudioCode: vr.NextCode,
+			Notes:         vr.Notes,
+			IsEnabled:     vr.IsEnabled,
 		})
 		if err != nil {
 			report.ErrorCount++

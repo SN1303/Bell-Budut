@@ -52,6 +52,17 @@ func NewServer(db *database.DB, audioMgr *audio.Manager, sched *scheduler.Schedu
 		s.sched.Broadcast(data)
 	})
 
+	// Auto-broadcast when a queued follow-up audio (e.g. Mars after the bell) starts
+	s.audioMgr.SetOnStart(func(code, name string) {
+		startPayload := map[string]interface{}{
+			"type":       "SERVER_AUDIO_STARTED",
+			"audio_code": code,
+			"audio_name": name,
+		}
+		data, _ := json.Marshal(startPayload)
+		s.sched.Broadcast(data)
+	})
+
 	return s
 }
 
@@ -815,6 +826,18 @@ func (s *Server) handleAudioTestServer(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// If another track was playing, broadcast stopped event for old track
+	wasPlaying, oldCode, oldName := s.audioMgr.CurrentStatus()
+	if wasPlaying && oldCode != "" {
+		oldStopPayload := map[string]interface{}{
+			"type":       "SERVER_AUDIO_STOPPED",
+			"audio_code": oldCode,
+			"audio_name": oldName,
+		}
+		oldData, _ := json.Marshal(oldStopPayload)
+		s.sched.Broadcast(oldData)
+	}
+
 	filePath := filepath.Join(s.audioDir, audioFile.Filename)
 	if err := s.audioMgr.PlayFile(filePath, audioFile.Code, audioFile.Name); err != nil {
 		s.jsonError(w, "Gagal memutar di speaker server: "+err.Error(), http.StatusInternalServerError)
@@ -834,14 +857,19 @@ func (s *Server) handleAudioTestServer(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleAudioStopServer(w http.ResponseWriter, r *http.Request) {
+	// Capture what was playing before stopping
+	_, oldCode, oldName := s.audioMgr.CurrentStatus()
+
 	if err := s.audioMgr.Stop(); err != nil {
 		s.jsonError(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 
-	// Broadcast that server audio stopped
+	// Broadcast that server audio stopped (with code info so UI can match)
 	stopPayload := map[string]interface{}{
-		"type": "SERVER_AUDIO_STOPPED",
+		"type":       "SERVER_AUDIO_STOPPED",
+		"audio_code": oldCode,
+		"audio_name": oldName,
 	}
 	data, _ := json.Marshal(stopPayload)
 	s.sched.Broadcast(data)

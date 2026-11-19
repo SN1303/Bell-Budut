@@ -53,9 +53,15 @@ type Schedule struct {
 	Title     string `json:"title"`
 	AudioCode string `json:"audio_code"`
 	AudioName string `json:"audio_name,omitempty"`
-	Notes     string `json:"notes"`
-	IsEnabled bool   `json:"is_enabled"`
-	CreatedAt string `json:"created_at"`
+	// NextAudioCode: optional follow-up audio(s) played automatically, in order,
+	// right after the main bell audio finishes. Comma separated codes,
+	// e.g. "AUD-16,FLD-01" = Indonesia Raya, then a random Lagu Daerah.
+	// NextAudioName is the display text, e.g. "Indonesia Raya → Lagu Daerah ...".
+	NextAudioCode string `json:"next_audio_code"`
+	NextAudioName string `json:"next_audio_name,omitempty"`
+	Notes         string `json:"notes"`
+	IsEnabled     bool   `json:"is_enabled"`
+	CreatedAt     string `json:"created_at"`
 }
 
 type BellLog struct {
@@ -164,6 +170,8 @@ func (d *DB) migrate() error {
 	}
 	// Migrate column is_folder if not exists
 	_, _ = d.db.Exec("ALTER TABLE audio_files ADD COLUMN is_folder INTEGER DEFAULT 0")
+	// Migrate column next_audio_code (follow-up audio after the bell) if not exists
+	_, _ = d.db.Exec("ALTER TABLE schedules ADD COLUMN next_audio_code TEXT DEFAULT ''")
 	return nil
 }
 
@@ -173,12 +181,12 @@ func (d *DB) seedDefaults() error {
 
 	// 1. Seed Settings
 	defaultSettings := map[string]string{
-		"admin_pin":             "1234",
-		"school_name":           "SMK / SMA BUDUT",
-		"holiday_mode":          "false",
-		"server_audio_enabled":  "true",
-		"web_audio_default":     "true",
-		"server_volume":         "100",
+		"admin_pin":            "1234",
+		"school_name":          "SMK / SMA BUDUT",
+		"holiday_mode":         "false",
+		"server_audio_enabled": "true",
+		"web_audio_default":    "true",
+		"server_volume":        "100",
 	}
 
 	for k, v := range defaultSettings {
@@ -188,7 +196,7 @@ func (d *DB) seedDefaults() error {
 	// 2. Seed Default Audio Files
 	defaultAudios := []struct {
 		code, name, filename, desc string
-		dur                         int
+		dur                        int
 	}{
 		{"AUD-01", "Bel 3 Nada (Do-Mi-Sol)", "bel_3_nada.wav", "Nada merdu 3 chord, cocok untuk bel istirahat/masuk santai", 3},
 		{"AUD-02", "Bel 2 Nada (Ding-Dong)", "bel_2_nada.wav", "Nada ganda singkat, cocok untuk panggilan/pergantian jam", 2},
@@ -593,7 +601,7 @@ func (d *DB) DeleteAudioFile(id int64) (*AudioFile, error) {
 
 	// Check if used in any schedule
 	var usedCount int
-	_ = d.db.QueryRow(`SELECT COUNT(*) FROM schedules WHERE audio_code = ?`, a.Code).Scan(&usedCount)
+	_ = d.db.QueryRow(`SELECT COUNT(*) FROM schedules WHERE audio_code = ? OR (',' || REPLACE(COALESCE(next_audio_code, ''), ' ', '') || ',') LIKE ?`, a.Code, "%,"+a.Code+",%").Scan(&usedCount)
 	if usedCount > 0 {
 		return nil, fmt.Errorf("audio sedang digunakan oleh %d jadwal, tidak bisa dihapus", usedCount)
 	}
@@ -610,7 +618,9 @@ func (d *DB) GetSchedules(groupID int64, dayOfWeek string) ([]Schedule, error) {
 
 	query := `
 		SELECT s.id, s.group_id, g.name as group_name, s.day_of_week, s.time, s.title, 
-		       s.audio_code, COALESCE(a.name, '') as audio_name, s.notes, s.is_enabled, s.created_at
+		       s.audio_code, COALESCE(a.name, '') as audio_name,
+		       COALESCE(s.next_audio_code, ''),
+		       s.notes, s.is_enabled, s.created_at
 		FROM schedules s
 		JOIN groups g ON g.id = s.group_id
 		LEFT JOIN audio_files a ON a.code = s.audio_code
@@ -654,13 +664,62 @@ func (d *DB) GetSchedules(groupID int64, dayOfWeek string) ([]Schedule, error) {
 		var s Schedule
 		var isEn int
 		if err := rows.Scan(&s.ID, &s.GroupID, &s.GroupName, &s.DayOfWeek, &s.Time, &s.Title,
-			&s.AudioCode, &s.AudioName, &s.Notes, &isEn, &s.CreatedAt); err != nil {
+			&s.AudioCode, &s.AudioName, &s.NextAudioCode, &s.Notes, &isEn, &s.CreatedAt); err != nil {
 			return nil, err
 		}
 		s.IsEnabled = isEn == 1
 		list = append(list, s)
 	}
+	rows.Close()
+
+	// Resolve display names of follow-up audio chains
+	needNames := false
+	for _, s := range list {
+		if s.NextAudioCode != "" {
+			needNames = true
+			break
+		}
+	}
+	if needNames {
+		names := make(map[string]string)
+		if nrows, err := d.db.Query(`SELECT code, name FROM audio_files`); err == nil {
+			for nrows.Next() {
+				var c, n string
+				if nrows.Scan(&c, &n) == nil {
+					names[strings.ToUpper(c)] = n
+				}
+			}
+			nrows.Close()
+		}
+		for i := range list {
+			var parts []string
+			for _, c := range SplitAudioCodes(list[i].NextAudioCode) {
+				if n, ok := names[c]; ok {
+					parts = append(parts, n)
+				} else {
+					parts = append(parts, c)
+				}
+			}
+			list[i].NextAudioName = strings.Join(parts, " → ")
+		}
+	}
 	return list, nil
+}
+
+// SplitAudioCodes parses a comma separated follow-up chain ("AUD-16, FLD-01") into clean upper-case codes.
+func SplitAudioCodes(v string) []string {
+	var out []string
+	for _, p := range strings.FieldsFunc(v, func(r rune) bool { return r == ',' || r == ';' || r == '|' }) {
+		if c := strings.ToUpper(strings.TrimSpace(p)); c != "" {
+			out = append(out, c)
+		}
+	}
+	return out
+}
+
+// JoinAudioCodes is the storage form of a follow-up chain.
+func JoinAudioCodes(codes []string) string {
+	return strings.Join(codes, ",")
 }
 
 func (d *DB) CreateSchedule(s *Schedule) (*Schedule, error) {
@@ -673,9 +732,9 @@ func (d *DB) CreateSchedule(s *Schedule) (*Schedule, error) {
 	}
 
 	res, err := d.db.Exec(`
-		INSERT INTO schedules (group_id, day_of_week, time, title, audio_code, notes, is_enabled)
-		VALUES (?, ?, ?, ?, ?, ?, ?)
-	`, s.GroupID, strings.ToUpper(s.DayOfWeek), s.Time, s.Title, s.AudioCode, s.Notes, enVal)
+		INSERT INTO schedules (group_id, day_of_week, time, title, audio_code, next_audio_code, notes, is_enabled)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+	`, s.GroupID, strings.ToUpper(s.DayOfWeek), s.Time, s.Title, s.AudioCode, JoinAudioCodes(SplitAudioCodes(s.NextAudioCode)), s.Notes, enVal)
 	if err != nil {
 		return nil, err
 	}
@@ -694,9 +753,9 @@ func (d *DB) UpdateSchedule(s *Schedule) error {
 
 	_, err := d.db.Exec(`
 		UPDATE schedules 
-		SET group_id = ?, day_of_week = ?, time = ?, title = ?, audio_code = ?, notes = ?, is_enabled = ?
+		SET group_id = ?, day_of_week = ?, time = ?, title = ?, audio_code = ?, next_audio_code = ?, notes = ?, is_enabled = ?
 		WHERE id = ?
-	`, s.GroupID, strings.ToUpper(s.DayOfWeek), s.Time, s.Title, s.AudioCode, s.Notes, enVal, s.ID)
+	`, s.GroupID, strings.ToUpper(s.DayOfWeek), s.Time, s.Title, s.AudioCode, JoinAudioCodes(SplitAudioCodes(s.NextAudioCode)), s.Notes, enVal, s.ID)
 	return err
 }
 
@@ -892,4 +951,3 @@ func (d *DB) DeleteSession(token string) error {
 	_, err := d.db.Exec(`DELETE FROM sessions WHERE token = ?`, token)
 	return err
 }
-

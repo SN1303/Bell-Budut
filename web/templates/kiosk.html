@@ -3,247 +3,663 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Layar Kiosk - Bel Sekolah Budut</title>
-  <link rel="stylesheet" href="/static/css/tailwind.min.css">
+  <title>Layar Kiosk - Bel Sekolah</title>
   <style>
-    @keyframes pulse-ring {
-      0% { transform: scale(0.97); opacity: 0.9; }
-      50% { transform: scale(1.03); opacity: 0.5; }
-      100% { transform: scale(0.97); opacity: 0.9; }
+    :root {
+      --bg: #070b16;
+      --panel: #0f1629;
+      --panel-2: #141d36;
+      --line: #1f2a48;
+      --text: #eef2ff;
+      --muted: #8a96b8;
+      --dim: #4b5677;
+      --blue: #60a5fa;
+      --green: #34d399;
+      --green-bg: rgba(52, 211, 153, .12);
+      --amber: #fbbf24;
+      --amber-bg: rgba(251, 191, 36, .12);
+      --red: #f87171;
+      --violet: #c4b5fd;
+      --radius: 22px;
     }
-    .bell-ring-active {
-      animation: pulse-ring 1s infinite;
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body { height: 100%; }
+    body {
+      background: radial-gradient(1200px 600px at 15% -10%, #12224a 0%, transparent 60%),
+                  radial-gradient(900px 500px at 110% 110%, #10263a 0%, transparent 55%),
+                  var(--bg);
+      color: var(--text);
+      font-family: "Segoe UI", system-ui, -apple-system, Roboto, Arial, sans-serif;
+      -webkit-font-smoothing: antialiased;
+      user-select: none;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+    }
+    body.idle, body.idle * { cursor: none !important; }
+    .num { font-family: "Segoe UI", system-ui, Roboto, Arial, sans-serif; font-variant-numeric: tabular-nums; }
+    .mono { font-family: "Cascadia Mono", Consolas, "SF Mono", "Roboto Mono", monospace; font-variant-numeric: tabular-nums; }
+
+    /* ---------- Header ---------- */
+    header {
+      display: flex; align-items: center; justify-content: space-between; gap: 16px;
+      padding: 14px 28px; border-bottom: 1px solid var(--line);
+      background: rgba(10, 15, 30, .7);
+    }
+    .brand { display: flex; align-items: center; gap: 14px; min-width: 0; }
+    .brand-icon {
+      width: 52px; height: 52px; border-radius: 16px; flex-shrink: 0;
+      display: grid; place-items: center; font-size: 26px;
+      background: linear-gradient(135deg, #1e3a8a, #0f1d4a); box-shadow: inset 0 0 0 1px #2c4a9a;
+    }
+    .brand h1 { font-size: clamp(18px, 1.6vw, 28px); font-weight: 800; letter-spacing: -.01em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .brand p { font-size: 13px; color: var(--muted); margin-top: 2px; }
+    .head-right { display: flex; align-items: center; gap: 10px; flex-shrink: 0; }
+    .chip {
+      display: inline-flex; align-items: center; gap: 8px; padding: 9px 14px; border-radius: 14px;
+      background: var(--panel); border: 1px solid var(--line); font-size: 13px; font-weight: 700; white-space: nowrap;
+    }
+    .chip .lbl { color: var(--muted); text-transform: uppercase; letter-spacing: .08em; font-size: 11px; }
+    .chip .val { color: var(--amber); }
+    .dot { width: 9px; height: 9px; border-radius: 50%; background: var(--green); box-shadow: 0 0 0 4px rgba(52,211,153,.15); }
+    .dot.off { background: var(--red); box-shadow: 0 0 0 4px rgba(248,113,113,.18); }
+    .btn {
+      display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+      height: 40px; min-width: 40px; padding: 0 12px; border-radius: 12px; cursor: pointer;
+      background: var(--panel); border: 1px solid var(--line); color: var(--text);
+      font-size: 13px; font-weight: 700; text-decoration: none; transition: background .15s;
+    }
+    .btn:hover { background: var(--panel-2); }
+    .btn.on { background: rgba(52,211,153,.15); border-color: rgba(52,211,153,.5); color: var(--green); }
+    .btn.primary { background: #1e3a8a; border-color: #2c4a9a; }
+
+    /* ---------- Banners ---------- */
+    .banner { display: none; padding: 10px 28px; text-align: center; font-weight: 800; font-size: 16px; }
+    .banner.show { display: block; }
+    .banner.holiday { background: #b91c1c; }
+    .banner.offline { background: #7c2d12; }
+    .banner.hint { background: #1e3a8a; font-size: 14px; font-weight: 700; cursor: pointer; }
+
+    /* ---------- Layout ---------- */
+    main {
+      flex: 1; min-height: 0;
+      display: grid; grid-template-columns: minmax(0, 1.45fr) minmax(0, 1fr); gap: 22px;
+      padding: 22px 28px;
+    }
+    .col { display: flex; flex-direction: column; gap: 22px; min-height: 0; }
+    .card {
+      background: linear-gradient(180deg, rgba(20,29,54,.85), rgba(15,22,41,.85));
+      border: 1px solid var(--line); border-radius: var(--radius); padding: 22px 26px;
+      box-shadow: 0 20px 50px -25px rgba(0,0,0,.6);
+    }
+    .eyebrow { font-size: 12px; font-weight: 800; letter-spacing: .14em; text-transform: uppercase; color: var(--muted); }
+
+    /* Clock */
+    .clock-card { flex: 1.25; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; min-height: 0; }
+    .clock-day { font-size: clamp(16px, 1.6vw, 26px); font-weight: 800; letter-spacing: .3em; color: var(--blue); }
+    .clock { font-size: clamp(84px, 11vw, 220px); font-weight: 800; line-height: 1; letter-spacing: -.04em; margin: 6px 0 4px; }
+    .clock .sec { font-size: .38em; color: var(--blue); letter-spacing: 0; margin-left: .12em; vertical-align: .95em; }
+    .clock .colon { animation: blink 1s steps(1) infinite; margin: 0 .02em; position: relative; top: -.06em; }
+    @keyframes blink { 50% { opacity: .25; } }
+    .clock-date { font-size: clamp(16px, 1.5vw, 26px); color: #c7d2fe; font-weight: 600; }
+
+    /* Now + Next */
+    .duo { display: grid; grid-template-columns: 1fr 1fr; gap: 22px; }
+    .now-card { border-color: rgba(52,211,153,.35); }
+    .next-card { border-color: rgba(251,191,36,.35); }
+    .now-card .eyebrow { color: var(--green); }
+    .next-card .eyebrow { color: var(--amber); }
+    .big-title { font-size: clamp(22px, 2.1vw, 38px); font-weight: 800; margin-top: 10px; line-height: 1.15; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .sub { font-size: clamp(13px, 1.1vw, 18px); color: var(--muted); margin-top: 6px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .progress { height: 10px; background: #0b1224; border-radius: 99px; margin-top: 16px; overflow: hidden; border: 1px solid var(--line); }
+    .progress > div { height: 100%; width: 0%; background: linear-gradient(90deg, #059669, var(--green)); border-radius: 99px; transition: width 1s linear; }
+    .row-between { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; margin-top: 8px; }
+    .remain { font-size: clamp(13px, 1.1vw, 18px); color: var(--muted); }
+    .remain b { color: var(--green); font-size: 1.25em; }
+    .countdown { font-size: clamp(44px, 4.8vw, 92px); font-weight: 800; color: var(--amber); line-height: 1; margin-top: 10px; }
+    .countdown.soon { color: var(--red); animation: pulse 1s ease-in-out infinite; }
+    @keyframes pulse { 50% { opacity: .55; } }
+    .pill { display: inline-block; padding: 3px 10px; border-radius: 99px; font-size: 12px; font-weight: 800; background: var(--amber-bg); color: var(--amber); }
+
+    /* Now playing strip */
+    .playing { display: none; align-items: center; gap: 12px; padding: 14px 22px; border-radius: 16px; background: rgba(196,181,253,.1); border: 1px solid rgba(196,181,253,.35); font-weight: 700; font-size: clamp(14px, 1.2vw, 20px); }
+    .playing.show { display: flex; }
+    .eq { display: inline-flex; gap: 3px; align-items: flex-end; height: 18px; }
+    .eq i { width: 4px; background: var(--violet); border-radius: 2px; animation: eq 0.9s ease-in-out infinite; }
+    .eq i:nth-child(2) { animation-delay: .2s; } .eq i:nth-child(3) { animation-delay: .4s; } .eq i:nth-child(4) { animation-delay: .1s; }
+    @keyframes eq { 0%,100% { height: 5px; } 50% { height: 18px; } }
+
+    /* Schedule list */
+    .list-card { flex: 1; display: flex; flex-direction: column; min-height: 0; padding: 20px 18px 14px; }
+    .list-head { display: flex; justify-content: space-between; align-items: center; padding: 0 8px 14px; border-bottom: 1px solid var(--line); }
+    .list-head h2 { font-size: clamp(15px, 1.2vw, 20px); font-weight: 800; letter-spacing: .06em; text-transform: uppercase; }
+    .list-head span { font-size: 13px; color: var(--muted); }
+    .list { flex: 1; overflow-y: auto; padding: 12px 4px 4px; scroll-behavior: smooth; scrollbar-width: thin; scrollbar-color: var(--line) transparent; }
+    .item {
+      display: grid; grid-template-columns: 74px 1fr auto; align-items: center; gap: 14px;
+      padding: 12px 14px; border-radius: 14px; border: 1px solid transparent; margin-bottom: 6px;
+    }
+    .item .t { font-size: clamp(16px, 1.3vw, 22px); font-weight: 800; color: var(--text); }
+    .item .ttl { font-size: clamp(14px, 1.15vw, 19px); font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .item .meta { font-size: 12.5px; color: var(--muted); margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .item .meta .mars { color: var(--violet); font-weight: 700; }
+    .item .tag { font-size: 11px; font-weight: 800; padding: 4px 9px; border-radius: 99px; letter-spacing: .04em; white-space: nowrap; }
+    .item.upcoming { background: rgba(255,255,255,.02); border-color: var(--line); }
+    .item.upcoming .tag { background: rgba(96,165,250,.12); color: var(--blue); }
+    .item.past { opacity: .38; }
+    .item.past .tag { background: transparent; color: var(--dim); }
+    .item.current { background: var(--green-bg); border-color: rgba(52,211,153,.55); }
+    .item.current .t, .item.current .tag { color: var(--green); }
+    .item.current .tag { background: rgba(52,211,153,.18); }
+    .item.next { background: var(--amber-bg); border-color: rgba(251,191,36,.55); }
+    .item.next .t { color: var(--amber); }
+    .item.next .tag { background: rgba(251,191,36,.2); color: var(--amber); }
+    .item.warn { padding-top: 7px; padding-bottom: 7px; }
+    .item.warn .ttl { font-size: clamp(12.5px, 1vw, 16px); font-weight: 600; color: #cbd5e1; }
+    .item.warn .t { font-size: clamp(13px, 1.05vw, 17px); color: #94a3b8; }
+    .item.next.warn .t { color: var(--amber); }
+    .empty { text-align: center; color: var(--muted); padding: 50px 10px; font-size: 15px; }
+
+    footer { padding: 8px 28px 12px; display: flex; justify-content: space-between; font-size: 12px; color: var(--dim); }
+
+    /* ---------- Bell ring overlay ---------- */
+    .ring {
+      position: fixed; inset: 0; z-index: 50; display: none; flex-direction: column; align-items: center; justify-content: center;
+      text-align: center; padding: 24px;
+      background: radial-gradient(circle at center, rgba(5,150,105,.97), rgba(4,47,46,.98));
+    }
+    .ring.show { display: flex; animation: fadein .3s ease-out; }
+    @keyframes fadein { from { opacity: 0; } to { opacity: 1; } }
+    .ring .bell { font-size: clamp(90px, 12vw, 200px); animation: swing 0.6s ease-in-out infinite alternate; transform-origin: 50% 10%; }
+    @keyframes swing { from { transform: rotate(-16deg); } to { transform: rotate(16deg); } }
+    .ring .r-time { font-size: clamp(22px, 2.4vw, 40px); font-weight: 800; color: #a7f3d0; margin-top: 10px; }
+    .ring .r-title { font-size: clamp(40px, 6vw, 110px); font-weight: 900; line-height: 1.05; margin-top: 8px; max-width: 92vw; text-shadow: 0 6px 30px rgba(0,0,0,.35); }
+    .ring .r-sub { font-size: clamp(16px, 1.6vw, 28px); color: #d1fae5; margin-top: 18px; }
+    .ring .r-next { font-size: clamp(15px, 1.4vw, 24px); color: #e9d5ff; margin-top: 8px; font-weight: 700; }
+    .ring .r-hint { position: absolute; bottom: 22px; font-size: 13px; color: rgba(255,255,255,.55); }
+
+    /* ---------- Responsive ---------- */
+    @media (max-width: 1100px) {
+      html, body { height: auto; }
+      body { overflow: auto; display: block; }
+      main { grid-template-columns: 1fr; }
+      .col, .clock-card, .list-card { flex: none; min-height: auto; }
+      .clock-card { padding: 30px 18px; }
+      .list { overflow: visible; }
+      .chip.group .lbl { display: none; }
+    }
+    @media (max-width: 720px) {
+      header { padding: 12px 16px; flex-wrap: wrap; }
+      main { padding: 16px; gap: 16px; }
+      .col { gap: 16px; }
+      .duo { grid-template-columns: 1fr; gap: 16px; }
+      .brand p, .btn .txt { display: none; }
+      .card { padding: 18px; }
+      footer { padding: 8px 16px 12px; }
     }
   </style>
 </head>
-<body class="bg-gray-950 text-white min-h-screen flex flex-col font-sans select-none overflow-x-hidden">
+<body>
 
-  <!-- Top Bar -->
-  <header class="bg-gray-900 border-b border-gray-800 px-6 py-4 flex justify-between items-center">
-    <div class="flex items-center space-x-4">
-      <div class="w-12 h-12 bg-blue-950 text-yellow-400 rounded-xl flex items-center justify-center text-2xl font-bold shadow-inner">
-        🔔
-      </div>
-      <div>
-        <h1 class="text-xl font-extrabold tracking-tight" id="kioskSchoolName">SMK / SMA BUDUT</h1>
-        <p class="text-xs text-gray-400 font-medium">Layar Informasi Jadwal & Bel Sekolah Otomatis</p>
+  <header>
+    <div class="brand">
+      <div class="brand-icon">🔔</div>
+      <div style="min-width:0">
+        <h1 id="schoolName">Memuat...</h1>
+        <p>Jadwal &amp; Bel Sekolah Otomatis</p>
       </div>
     </div>
-
-    <div class="flex items-center space-x-4">
-      <!-- Active Group Badge -->
-      <div class="flex items-center space-x-2 bg-gray-800 border border-gray-700 px-4 py-2 rounded-xl">
-        <span class="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse"></span>
-        <span class="text-xs uppercase tracking-wider text-gray-400 font-bold">Grup Aktif:</span>
-        <span class="text-sm font-bold text-yellow-400" id="kioskGroupName">Memuat...</span>
-      </div>
-
-      <!-- Browser Audio Toggle (for standalone kiosk sound) -->
-      <button onclick="toggleKioskAudio()" id="btnKioskAudio" class="p-2.5 rounded-xl bg-gray-800 hover:bg-gray-700 border border-gray-700 transition" title="Aktifkan Bunyi di Layar Ini">
-        <span id="kioskAudioIcon">🔇</span>
-      </button>
-
-      <!-- Exit Fullscreen / Dashboard Link -->
-      <a href="/" class="text-xs bg-blue-900 hover:bg-blue-800 text-white px-3.5 py-2 rounded-xl font-bold transition">
-        Buka Dashboard
-      </a>
+    <div class="head-right">
+      <div class="chip group"><span class="dot" id="connDot"></span><span class="lbl">Grup</span><span class="val" id="groupName">-</span></div>
+      <button class="btn" id="btnAudio" onclick="toggleAudio()" title="Bunyikan bel juga di layar ini"><span id="audioIcon">🔇</span><span class="txt" id="audioText">Suara Mati</span></button>
+      <button class="btn" onclick="toggleFullscreen()" title="Layar penuh (F)">⛶</button>
+      <a class="btn primary" href="/" title="Kembali ke dashboard"><span class="txt">Dashboard</span><span>↗</span></a>
     </div>
   </header>
 
-  <!-- Live Bell Ring Alert (Fullscreen Banner) -->
-  <div id="kioskRingBanner" class="hidden bg-emerald-600 text-white px-6 py-4 text-center font-bold text-2xl shadow-2xl transition-all">
-    🔔 <span id="kioskRingTitle">BEL SEDANG BERBUNYI!</span>
-  </div>
+  <div class="banner holiday" id="holidayBanner">⚠️ MODE LIBUR AKTIF — Bel otomatis tidak dibunyikan hari ini</div>
+  <div class="banner offline" id="offlineBanner">⚠️ Koneksi ke server terputus — mencoba menyambung kembali...</div>
+  <div class="banner hint" id="audioHint" onclick="unlockAudio()">🔊 Klik di mana saja untuk mengaktifkan suara bel di layar ini</div>
 
-  <!-- Holiday Mode Notice -->
-  <div id="kioskHolidayBanner" class="hidden bg-red-600 text-white px-6 py-3 text-center font-bold text-base shadow">
-    ⚠️ PERHATIAN: MODE LIBUR AKTIF - Bel Otomatis Dinonaktifkan Hari Ini
-  </div>
+  <main>
+    <div class="col">
+      <section class="card clock-card">
+        <div class="clock-day" id="dayName">-</div>
+        <div class="clock num" id="clock">&nbsp;</div>
+        <div class="clock-date" id="dateText">Memuat tanggal...</div>
+      </section>
 
-  <!-- Main Kiosk Body -->
-  <main class="flex-1 max-w-7xl w-full mx-auto p-6 grid grid-cols-1 lg:grid-cols-12 gap-6 items-stretch">
-
-    <!-- Left Column: Giant Clock & Next Bell Card (7 Cols) -->
-    <div class="lg:col-span-7 flex flex-col justify-between space-y-6">
-
-      <!-- Giant Digital Clock Card -->
-      <div class="bg-gray-900 border border-gray-800 rounded-3xl p-8 flex flex-col items-center justify-center text-center shadow-2xl flex-1">
-        <div class="text-sm uppercase tracking-widest text-gray-400 font-bold mb-2" id="kioskDayName">RABU</div>
-        <div class="text-7xl sm:text-8xl md:text-9xl font-black font-mono tracking-tighter text-blue-400 drop-shadow-md" id="kioskClock">
-          --:--:--
-        </div>
-        <div class="text-lg sm:text-xl font-medium text-gray-300 mt-3" id="kioskDate">
-          Memuat tanggal...
-        </div>
-      </div>
-
-      <!-- Next Bell Countdown Card -->
-      <div class="bg-gradient-to-r from-blue-950 to-indigo-950 border border-blue-800 rounded-3xl p-6 shadow-2xl">
-        <div class="flex items-center justify-between">
-          <span class="text-xs uppercase font-extrabold tracking-widest text-blue-300">HITUNG MUNDUR BEL BERIKUTNYA</span>
-          <span class="text-xs font-mono bg-blue-900 text-blue-200 px-3 py-1 rounded-full font-bold" id="kioskNextTime">Pukul --:--</span>
-        </div>
-        <div class="flex items-baseline space-x-4 mt-3">
-          <div class="text-5xl sm:text-6xl font-extrabold text-emerald-400 font-mono" id="kioskCountdown">
-            --:--
+      <div class="duo">
+        <section class="card now-card">
+          <div class="eyebrow">Sedang Berlangsung</div>
+          <div class="big-title" id="nowTitle">-</div>
+          <div class="sub mono" id="nowRange">&nbsp;</div>
+          <div class="progress"><div id="nowBar"></div></div>
+          <div class="row-between">
+            <span class="remain" id="nowRemain">&nbsp;</span>
           </div>
-          <div class="text-xl sm:text-2xl font-bold text-white truncate" id="kioskNextTitle">
-            Menunggu jadwal...
+        </section>
+
+        <section class="card next-card">
+          <div class="row-between" style="margin-top:0">
+            <span class="eyebrow">Bel Berikutnya</span>
+            <span class="pill mono" id="nextTime">--:--</span>
           </div>
-        </div>
-        <div class="text-xs text-blue-300 mt-2" id="kioskNextNotes"></div>
+          <div class="countdown num" id="countdown">&nbsp;</div>
+          <div class="big-title" id="nextTitle" style="font-size:clamp(18px,1.6vw,28px)">Menunggu jadwal...</div>
+          <div class="sub" id="nextSub">&nbsp;</div>
+        </section>
       </div>
 
-    </div>
-
-    <!-- Right Column: Today's Full Schedule Table (5 Cols) -->
-    <div class="lg:col-span-5 bg-gray-900 border border-gray-800 rounded-3xl p-6 flex flex-col shadow-2xl">
-      <div class="flex justify-between items-center mb-4 pb-3 border-b border-gray-800">
-        <h3 class="font-extrabold text-base tracking-wide uppercase text-gray-200">Jadwal Bel Hari Ini</h3>
-        <span class="text-xs text-gray-400 font-mono" id="kioskTotalCount">0 Jadwal</span>
-      </div>
-
-      <div class="flex-1 overflow-y-auto space-y-2 pr-1" id="kioskScheduleList">
-        <!-- Dynamically populated items -->
-        <div class="text-center text-gray-500 py-10 text-xs">Memuat daftar jadwal hari ini...</div>
+      <div class="playing" id="playingStrip">
+        <span class="eq"><i></i><i></i><i></i><i></i></span>
+        <span>Sedang diputar di speaker:</span>
+        <span id="playingName" style="color:var(--violet)"></span>
       </div>
     </div>
 
+    <section class="card list-card">
+      <div class="list-head">
+        <h2>Jadwal Bel Hari Ini</h2>
+        <span id="totalCount">0 bel</span>
+      </div>
+      <div class="list" id="list">
+        <div class="empty">Memuat jadwal hari ini...</div>
+      </div>
+    </section>
   </main>
 
-  <footer class="bg-gray-950 border-t border-gray-900 px-6 py-3 text-center text-xs text-gray-500">
-    Sistem Bel Budut • Waktu disinkronkan secara real-time dari server
+  <footer>
+    <span>Waktu mengikuti jam server bel</span>
+    <span id="lastSync">&nbsp;</span>
   </footer>
 
-  <audio id="kioskAudioPlayer" preload="auto"></audio>
+  <div class="ring" id="ring" onclick="hideRing()">
+    <div class="bell">🔔</div>
+    <div class="r-time mono" id="ringTime"></div>
+    <div class="r-title" id="ringTitle">BEL BERBUNYI</div>
+    <div class="r-sub" id="ringSub"></div>
+    <div class="r-next" id="ringNext"></div>
+    <div class="r-hint">Klik untuk menutup</div>
+  </div>
+
+  <audio id="kioskAudio" preload="auto"></audio>
 
   <script>
-    let webAudioEnabled = false;
-    let kioskAudio = document.getElementById('kioskAudioPlayer');
+    // ==================== STATE ====================
+    const $ = (id) => document.getElementById(id);
+    const audioEl = $('kioskAudio');
+    const AUDIO_KEY = 'kiosk_audio_enabled';
 
-    function toggleKioskAudio() {
-      webAudioEnabled = !webAudioEnabled;
-      document.getElementById('kioskAudioIcon').innerText = webAudioEnabled ? '🔊' : '🔇';
-      if (webAudioEnabled) {
-        kioskAudio.play().then(() => kioskAudio.pause()).catch(() => {});
-      }
+    let offsetSec = null;         // server seconds-of-day minus local seconds-of-day
+    let lastTickAt = 0;
+    let groupId = null;
+    let dayName = '';
+    let schedules = [];           // today's enabled schedules (sorted)
+    let nextBell = null;          // from server
+    let audioEnabled = false;
+    let audioUnlocked = false;
+    let ringTimer = null;
+    let lastCurrentId = null;
+
+    // ==================== HELPERS ====================
+    function esc(s) {
+      return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+    }
+    function hmToSec(hm) {
+      const p = String(hm || '').split(':').map(Number);
+      return (p[0] || 0) * 3600 + (p[1] || 0) * 60 + (p[2] || 0);
+    }
+    function localSecOfDay() {
+      const d = new Date();
+      return d.getHours() * 3600 + d.getMinutes() * 60 + d.getSeconds() + d.getMilliseconds() / 1000;
+    }
+    function nowSec() {
+      const base = localSecOfDay() + (offsetSec || 0);
+      return ((base % 86400) + 86400) % 86400;
+    }
+    function pad(n) { return String(Math.floor(n)).padStart(2, '0'); }
+    function fmtDur(sec) {
+      sec = Math.max(0, Math.floor(sec));
+      const h = Math.floor(sec / 3600), m = Math.floor((sec % 3600) / 60), s = sec % 60;
+      return h > 0 ? `${pad(h)}:${pad(m)}:${pad(s)}` : `${pad(m)}:${pad(s)}`;
+    }
+    function fmtHuman(sec) {
+      sec = Math.max(0, Math.round(sec));
+      const h = Math.floor(sec / 3600), m = Math.floor((sec % 3600) / 60), s = sec % 60;
+      if (h > 0) return `${h} jam ${m} menit`;
+      if (m > 0) return `${m} menit ${pad(s)} detik`;
+      return `${s} detik`;
+    }
+    // "5 Menit ..." reminders are small warning bells, not a period of their own
+    function isWarning(s) {
+      return /^\s*5\s*menit/i.test(s.title || '') || /^\s*5\s*menit/i.test(s.audio_name || '');
+    }
+    // Notes like "08:05 - 08:45" give an explicit end time
+    function explicitEnd(s) {
+      const m = String(s.notes || '').match(/(\d{1,2}:\d{2})\s*-\s*(\d{1,2}:\d{2})/);
+      return m ? hmToSec(m[2]) : null;
     }
 
-    // Connect to SSE
-    function initKioskSSE() {
-      const evtSource = new EventSource('/api/events');
-
-      evtSource.onmessage = function(e) {
-        try {
-          const data = JSON.parse(e.data);
-          if (data.type === 'TICK') {
-            document.getElementById('kioskClock').innerText = data.server_time;
-            document.getElementById('kioskDate').innerText = data.server_date;
-            document.getElementById('kioskDayName').innerText = data.day_name;
-
-            if (data.active_group) {
-              document.getElementById('kioskGroupName').innerText = data.active_group.name;
-            }
-
-            if (data.holiday_mode) {
-              document.getElementById('kioskHolidayBanner').classList.remove('hidden');
-            } else {
-              document.getElementById('kioskHolidayBanner').classList.add('hidden');
-            }
-
-            if (data.next_bell) {
-              document.getElementById('kioskCountdown').innerText = data.next_bell.countdown_display;
-              document.getElementById('kioskNextTime').innerText = 'Pukul ' + data.next_bell.time;
-              document.getElementById('kioskNextTitle').innerText = data.next_bell.title;
-              document.getElementById('kioskNextNotes').innerText = data.next_bell.notes || '';
-            } else {
-              document.getElementById('kioskCountdown').innerText = 'SELESAI';
-              document.getElementById('kioskNextTime').innerText = '--:--';
-              document.getElementById('kioskNextTitle').innerText = 'Tidak ada bel lagi hari ini';
-              document.getElementById('kioskNextNotes').innerText = '';
-            }
-          } else if (data.type === 'BELL_RING') {
-            // Visual Ring Alert
-            const banner = document.getElementById('kioskRingBanner');
-            document.getElementById('kioskRingTitle').innerText = data.title;
-            banner.classList.remove('hidden');
-            setTimeout(() => banner.classList.add('hidden'), 10000);
-
-            // Play in kiosk browser if audio enabled
-            if (webAudioEnabled && data.audio_url) {
-              kioskAudio.src = data.audio_url;
-              kioskAudio.play().catch(e => console.log('Audio autoplay blocked:', e));
-            }
-
-            loadTodayKioskSchedules();
-          }
-        } catch (err) {
-          console.error(err);
-        }
-      };
-
-      evtSource.onerror = function() {
-        console.warn('Kiosk SSE reconnecting...');
-      };
-    }
-
-    async function loadTodayKioskSchedules() {
+    // ==================== DATA ====================
+    async function loadSettings() {
       try {
-        const res = await fetch('/api/schedules');
+        const res = await fetch('/api/settings');
+        const json = await res.json();
+        if (json.success && json.data) {
+          const name = json.data.school_name || 'Bel Sekolah';
+          $('schoolName').innerText = name;
+          document.title = `Kiosk - ${name}`;
+        }
+      } catch (e) {}
+    }
+
+    async function loadSchedules() {
+      if (!groupId || !dayName) return;
+      try {
+        const res = await fetch(`/api/schedules?group_id=${encodeURIComponent(groupId)}&day=${encodeURIComponent(dayName)}`);
         const json = await res.json();
         if (!json.success) return;
+        schedules = (json.data || [])
+          .filter(s => s.is_enabled)
+          .sort((a, b) => hmToSec(a.time) - hmToSec(b.time));
+        lastCurrentId = null;
+        renderList(true);
+        renderPeriod();
+      } catch (e) {}
+    }
 
-        const container = document.getElementById('kioskScheduleList');
-        const now = new Date();
-        const curHM = String(now.getHours()).padStart(2, '0') + ':' + String(now.getMinutes()).padStart(2, '0');
+    // ==================== RENDER ====================
+    function renderClock() {
+      const t = nowSec(); // falls back to local time until the first server tick arrives
+      $('clock').innerHTML = `${pad(t / 3600)}<span class="colon">:</span>${pad((t % 3600) / 60)}<span class="sec">${pad(t % 60)}</span>`;
+    }
 
-        container.innerHTML = '';
-        const items = json.data || [];
-        document.getElementById('kioskTotalCount').innerText = items.length + ' Jadwal';
+    function getPeriod(t) {
+      const mains = schedules.filter(s => !isWarning(s));
+      if (mains.length === 0) return null;
+      let idx = -1;
+      for (let i = 0; i < mains.length; i++) {
+        if (hmToSec(mains[i].time) <= t) idx = i; else break;
+      }
+      if (idx === -1) {
+        return { kind: 'before', next: mains[0] };
+      }
+      if (idx === mains.length - 1) {
+        return { kind: 'after', cur: mains[idx] };
+      }
+      const cur = mains[idx], nxt = mains[idx + 1];
+      const start = hmToSec(cur.time);
+      let end = hmToSec(nxt.time);
+      const exEnd = explicitEnd(cur);
+      if (exEnd && exEnd > start && exEnd < end && t >= exEnd) {
+        return { kind: 'gap', next: nxt, start: exEnd, end };
+      }
+      if (exEnd && exEnd > start && exEnd <= end) end = exEnd;
+      return { kind: 'during', cur, next: nxt, start, end };
+    }
 
-        if (items.length === 0) {
-          container.innerHTML = '<div class="text-center text-gray-500 py-10 text-xs">Belum ada jadwal untuk hari ini.</div>';
-          return;
-        }
-
-        items.forEach(item => {
-          const isPast = item.time < curHM;
-          const isNext = item.time === curHM;
-
-          const div = document.createElement('div');
-          div.className = `p-3.5 rounded-2xl border transition flex items-center justify-between ${
-            isPast 
-              ? 'bg-gray-900 border-gray-800 text-gray-500' 
-              : 'bg-gray-800 border-gray-700 text-gray-100 hover:border-blue-500'
-          }`;
-
-          div.innerHTML = `
-            <div class="flex items-center space-x-3">
-              <span class="font-mono text-base font-extrabold ${isPast ? 'text-gray-500' : 'text-yellow-400'}">${item.time}</span>
-              <div>
-                <div class="font-bold text-sm ${isPast ? 'line-through text-gray-500' : 'text-white'}">${item.title}</div>
-                <div class="text-xs text-gray-400">${item.notes || item.audio_name || item.audio_code}</div>
-              </div>
-            </div>
-            <span class="text-xs font-bold px-2.5 py-1 rounded-full ${
-              isPast ? 'bg-gray-800 text-gray-500' : 'bg-emerald-900 text-emerald-300'
-            }">
-              ${isPast ? 'Lewat' : 'Menunggu'}
-            </span>
-          `;
-          container.appendChild(div);
-        });
-      } catch (err) {
-        console.error(err);
+    function renderPeriod() {
+      if (offsetSec === null) return;
+      const t = nowSec();
+      const p = getPeriod(t);
+      const bar = $('nowBar');
+      if (!p) {
+        $('nowTitle').innerText = 'Tidak ada jadwal';
+        $('nowRange').innerHTML = '&nbsp;';
+        $('nowRemain').innerHTML = '&nbsp;';
+        bar.style.width = '0%';
+        return;
+      }
+      if (p.kind === 'before') {
+        $('nowTitle').innerText = 'Belum dimulai';
+        $('nowRange').innerText = `Kegiatan pertama pukul ${p.next.time}`;
+        $('nowRemain').innerHTML = `Dimulai dalam <b class="mono">${fmtDur(hmToSec(p.next.time) - t)}</b>`;
+        bar.style.width = '0%';
+      } else if (p.kind === 'after') {
+        $('nowTitle').innerText = 'Kegiatan hari ini selesai';
+        $('nowRange').innerText = `${p.cur.title} • ${p.cur.time}`;
+        $('nowRemain').innerText = 'Sampai jumpa besok 👋';
+        bar.style.width = '100%';
+      } else if (p.kind === 'gap') {
+        $('nowTitle').innerText = 'Persiapan';
+        $('nowRange').innerText = `Menuju ${p.next.title}`;
+        $('nowRemain').innerHTML = `Mulai dalam <b class="mono">${fmtDur(p.end - t)}</b>`;
+        bar.style.width = `${Math.min(100, ((t - p.start) / Math.max(1, p.end - p.start)) * 100)}%`;
+      } else {
+        const endHM = `${pad(p.end / 3600)}:${pad((p.end % 3600) / 60)}`;
+        $('nowTitle').innerText = p.cur.title;
+        $('nowRange').innerText = `${p.cur.time} – ${endHM}`;
+        $('nowRemain').innerHTML = `Selesai dalam <b class="mono">${fmtDur(p.end - t)}</b>`;
+        bar.style.width = `${Math.min(100, ((t - p.start) / Math.max(1, p.end - p.start)) * 100)}%`;
       }
     }
 
+    function renderNext() {
+      if (!nextBell) {
+        $('countdown').innerText = '—';
+        $('countdown').classList.remove('soon');
+        $('nextTime').innerText = '--:--';
+        $('nextTitle').innerText = 'Tidak ada bel lagi hari ini';
+        $('nextSub').innerHTML = '&nbsp;';
+        return;
+      }
+      // Server countdown (handles next bell on another day), smoothed locally between ticks
+      let diff;
+      if (typeof nextBell.countdown_sec === 'number') {
+        diff = nextBell.countdown_sec - (Date.now() - lastTickAt) / 1000;
+      } else {
+        diff = hmToSec(nextBell.time) - nowSec();
+        if (diff < 0) diff += 86400;
+      }
+      $('countdown').innerText = fmtDur(diff);
+      $('countdown').classList.toggle('soon', diff <= 60);
+      $('nextTime').innerText = 'Pukul ' + nextBell.time;
+      $('nextTitle').innerText = nextBell.title;
+      $('nextSub').innerText = nextBell.audio_name ? `Nada: ${nextBell.audio_name}` : (nextBell.notes || ' ');
+    }
+
+    function renderList(forceScroll) {
+      const list = $('list');
+      $('totalCount').innerText = `${schedules.length} bel`;
+      if (schedules.length === 0) {
+        list.innerHTML = '<div class="empty">Belum ada jadwal bel untuk hari ini.</div>';
+        return;
+      }
+      const t = offsetSec === null ? localSecOfDay() : nowSec();
+      const p = getPeriod(t);
+      const curId = p && p.kind === 'during' ? p.cur.id : null;
+      const nextIdx = schedules.findIndex(s => hmToSec(s.time) > t);
+
+      list.innerHTML = schedules.map((s, i) => {
+        const warn = isWarning(s);
+        let state = 'upcoming', tag = 'Nanti';
+        if (s.id === curId) { state = 'current'; tag = 'Berlangsung'; }
+        else if (i === nextIdx) { state = 'next'; tag = 'Berikutnya'; }
+        else if (hmToSec(s.time) <= t) { state = 'past'; tag = 'Selesai'; }
+        const meta = [];
+        if (s.notes) meta.push(esc(s.notes));
+        else if (s.audio_name) meta.push(esc(s.audio_name));
+        if (s.next_audio_code) meta.push(`<span class="mars">♪ lalu ${esc(s.next_audio_name || s.next_audio_code)}</span>`);
+        return `
+          <div class="item ${state} ${warn ? 'warn' : ''}" data-id="${s.id}">
+            <div class="t mono">${esc(s.time)}</div>
+            <div style="min-width:0">
+              <div class="ttl">${warn ? '⏰ ' : ''}${esc(s.title)}</div>
+              ${!warn && meta.length ? `<div class="meta">${meta.join(' • ')}</div>` : ''}
+            </div>
+            <span class="tag">${tag}</span>
+          </div>`;
+      }).join('');
+
+      const focusId = curId || (nextIdx >= 0 ? schedules[nextIdx].id : null);
+      if (forceScroll || focusId !== lastCurrentId) {
+        lastCurrentId = focusId;
+        const el = focusId ? list.querySelector(`[data-id="${focusId}"]`) : null;
+        if (el) {
+          list.scrollTop = Math.max(0, el.offsetTop - list.offsetTop - 70);
+        }
+      }
+    }
+
+    // ==================== SSE ====================
+    function handleTick(d) {
+      lastTickAt = Date.now();
+      offsetSec = hmToSec(d.server_time) - localSecOfDay();
+      if (offsetSec > 43200) offsetSec -= 86400;
+      if (offsetSec < -43200) offsetSec += 86400;
+
+      $('dateText').innerText = d.server_date || '';
+      $('holidayBanner').classList.toggle('show', !!d.holiday_mode);
+
+      const newGroupId = d.active_group ? d.active_group.id : null;
+      $('groupName').innerText = d.active_group ? d.active_group.name : 'Tidak ada';
+      const newDay = d.day_name || '';
+      $('dayName').innerText = newDay;
+      if (newGroupId !== groupId || newDay !== dayName) {
+        groupId = newGroupId;
+        dayName = newDay;
+        loadSchedules();
+      }
+
+      nextBell = d.next_bell || null;
+
+      const strip = $('playingStrip');
+      if (d.is_server_playing && d.current_playing) {
+        $('playingName').innerText = String(d.current_playing).replace(/\s*\([^)]*\)\s*$/, '');
+        strip.classList.add('show');
+      } else {
+        strip.classList.remove('show');
+      }
+      $('lastSync').innerText = `Tersinkron ${d.server_time}`;
+    }
+
+    function handleBellRing(d) {
+      $('ringTime').innerText = d.time ? `Pukul ${d.time}` : '';
+      $('ringTitle').innerText = d.title || 'BEL BERBUNYI';
+      $('ringSub').innerText = d.audio_name ? `Nada: ${d.audio_name}` : '';
+      $('ringNext').innerText = d.next_audio_name ? `♪ dilanjutkan ${d.next_audio_name}` : '';
+      $('ring').classList.add('show');
+      clearTimeout(ringTimer);
+      ringTimer = setTimeout(hideRing, 15000);
+
+      if (audioEnabled && audioUnlocked && d.audio_url) {
+        audioEl.onended = null;
+        audioEl.src = d.audio_url;
+        const queue = (d.next_audio_urls && d.next_audio_urls.length) ? d.next_audio_urls.slice() : (d.next_audio_url ? [d.next_audio_url] : []);
+        if (queue.length) {
+          // Follow-up chain, e.g. Indonesia Raya -> Lagu Daerah
+          audioEl.onended = () => {
+            if (!queue.length) { audioEl.onended = null; return; }
+            audioEl.src = queue.shift();
+            if (!queue.length) audioEl.onended = null;
+            audioEl.play().catch(() => {});
+          };
+        }
+        audioEl.play().catch(e => console.log('Audio diblokir browser:', e));
+      }
+      setTimeout(loadSchedules, 1500);
+    }
+
+    function hideRing() {
+      clearTimeout(ringTimer);
+      $('ring').classList.remove('show');
+    }
+
+    function initSSE() {
+      const es = new EventSource('/api/events');
+      es.onmessage = (e) => {
+        try {
+          const d = JSON.parse(e.data);
+          if (d.type === 'TICK') handleTick(d);
+          else if (d.type === 'BELL_RING') handleBellRing(d);
+        } catch (err) { console.error(err); }
+      };
+      es.onerror = () => { /* EventSource reconnects automatically */ };
+    }
+
+    // ==================== AUDIO ====================
+    function updateAudioUI() {
+      $('audioIcon').innerText = audioEnabled ? '🔊' : '🔇';
+      $('audioText').innerText = audioEnabled ? 'Suara Aktif' : 'Suara Mati';
+      $('btnAudio').classList.toggle('on', audioEnabled);
+      $('audioHint').classList.toggle('show', audioEnabled && !audioUnlocked);
+    }
+    function unlockAudio() {
+      if (audioUnlocked) return;
+      // A user gesture is required by the browser before audio may autoplay
+      audioEl.muted = true;
+      audioEl.src = '/api/audio/stream/AUD-04';
+      audioEl.play().then(() => {
+        audioEl.pause();
+        audioEl.currentTime = 0;
+        audioEl.muted = false;
+        audioUnlocked = true;
+        updateAudioUI();
+      }).catch(() => { audioEl.muted = false; });
+    }
+    function toggleAudio() {
+      audioEnabled = !audioEnabled;
+      try { localStorage.setItem(AUDIO_KEY, audioEnabled ? 'true' : 'false'); } catch (e) {}
+      if (audioEnabled) unlockAudio();
+      else { audioEl.pause(); }
+      updateAudioUI();
+    }
+
+    // ==================== SCREEN ====================
+    function toggleFullscreen() {
+      if (!document.fullscreenElement) document.documentElement.requestFullscreen().catch(() => {});
+      else document.exitFullscreen().catch(() => {});
+    }
+
+    let wakeLock = null;
+    async function keepAwake() {
+      try {
+        if ('wakeLock' in navigator && document.visibilityState === 'visible') {
+          wakeLock = await navigator.wakeLock.request('screen');
+        }
+      } catch (e) {}
+    }
+
+    let idleTimer = null;
+    function resetIdle() {
+      document.body.classList.remove('idle');
+      clearTimeout(idleTimer);
+      idleTimer = setTimeout(() => document.body.classList.add('idle'), 4000);
+    }
+
+    // ==================== BOOT ====================
     window.addEventListener('DOMContentLoaded', () => {
-      initKioskSSE();
-      loadTodayKioskSchedules();
-      setInterval(loadTodayKioskSchedules, 60000);
+      try { audioEnabled = localStorage.getItem(AUDIO_KEY) === 'true'; } catch (e) {}
+      updateAudioUI();
+      renderClock();
+
+      loadSettings();
+      initSSE();
+      keepAwake();
+      resetIdle();
+
+      document.addEventListener('visibilitychange', keepAwake);
+      document.addEventListener('mousemove', resetIdle);
+      document.addEventListener('pointerdown', () => { resetIdle(); if (audioEnabled) unlockAudio(); });
+      document.addEventListener('keydown', (e) => {
+        if (e.key === 'f' || e.key === 'F') toggleFullscreen();
+        if (e.key === 'Escape') hideRing();
+      });
+
+      // Local 1-second render loop (keeps clock running smoothly between server ticks)
+      setInterval(() => {
+        renderClock();
+        renderPeriod();
+        renderNext();
+        $('offlineBanner').classList.toggle('show', lastTickAt > 0 && Date.now() - lastTickAt > 5000);
+        $('connDot').classList.toggle('off', lastTickAt === 0 || Date.now() - lastTickAt > 5000);
+      }, 1000);
+
+      // Refresh list states every 15s, reload data every 5 minutes
+      setInterval(() => renderList(false), 15000);
+      setInterval(() => { loadSchedules(); loadSettings(); }, 300000);
     });
   </script>
 </body>
 </html>
-

@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 
@@ -193,12 +194,27 @@ func (s *Scheduler) checkAndTriggerBell(group *ActiveGroupStatus, dayIndo, timeH
 			continue
 		}
 
+		// Optional follow-up audio (e.g. Mars) played right after the bell finishes
+		var nextItems []audio.QueueItem
+		var nextNames, nextURLs []string
+		for _, code := range database.SplitAudioCodes(sched.NextAudioCode) {
+			if na, err := s.db.GetAudioByCode(code); err == nil {
+				nextItems = append(nextItems, audio.QueueItem{
+					Path: filepath.Join(s.audioDir, na.Filename),
+					Code: na.Code,
+					Name: na.Name,
+				})
+				nextNames = append(nextNames, na.Name)
+				nextURLs = append(nextURLs, "/api/audio/stream/"+na.Code)
+			}
+		}
+
 		// 1. Play on Server Soundcard (if enabled)
 		if serverAudioEnabled {
 			audioPath := filepath.Join(s.audioDir, audioFile.Filename)
-			go func(path, code, name string) {
-				_ = s.audioMgr.PlayFile(path, code, name)
-			}(audioPath, audioFile.Code, audioFile.Name)
+			go func(path, code, name string, next []audio.QueueItem) {
+				_ = s.audioMgr.PlayFileThen(path, code, name, next...)
+			}(audioPath, audioFile.Code, audioFile.Name, nextItems)
 		}
 
 		// 2. Broadcast BELL_RING event to Web Clients (SSE)
@@ -212,6 +228,12 @@ func (s *Scheduler) checkAndTriggerBell(group *ActiveGroupStatus, dayIndo, timeH
 			"audio_url":   "/api/audio/stream/" + audioFile.Code,
 			"time":        timeHM,
 			"notes":       sched.Notes,
+		}
+		if len(nextItems) > 0 {
+			ringPayload["next_audio_code"] = nextItems[0].Code
+			ringPayload["next_audio_name"] = strings.Join(nextNames, " → ")
+			ringPayload["next_audio_url"] = nextURLs[0]
+			ringPayload["next_audio_urls"] = nextURLs
 		}
 		data, _ := json.Marshal(ringPayload)
 		s.Broadcast(data)

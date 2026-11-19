@@ -19,7 +19,18 @@ type Player interface {
 	SetOnEnd(fn func())
 }
 
+// QueueItem is an audio that will be played automatically after the current one ends.
+type QueueItem struct {
+	Path string // file or folder path (folders are resolved randomly when played)
+	Code string
+	Name string
+}
+
 type Manager struct {
+	playMu      sync.Mutex // serializes every start/stop so a chained play never overrides a newer action
+	gen         uint64     // incremented on every explicit PlayFile/Stop
+	pending     []QueueItem
+	onStart     func(code, name string)
 	player      Player
 	audioDir    string
 	mu          sync.RWMutex
@@ -31,8 +42,12 @@ type Manager struct {
 }
 
 func NewManager(audioDir string) *Manager {
+	return newManagerWithPlayer(audioDir, newPlatformPlayer())
+}
+
+func newManagerWithPlayer(audioDir string, player Player) *Manager {
 	m := &Manager{
-		player:     newPlatformPlayer(),
+		player:     player,
 		audioDir:   audioDir,
 		lastPlayed: make(map[string]string),
 		rng:        rand.New(rand.NewSource(time.Now().UnixNano())),
@@ -45,10 +60,12 @@ func NewManager(audioDir string) *Manager {
 			m.currentCode = ""
 			m.currentName = ""
 			cb := m.onEnd
+			gen := m.gen
 			m.mu.Unlock()
 			if cb != nil {
 				cb(code, name)
 			}
+			m.playNextQueued(gen)
 		})
 	}
 	return m
@@ -121,9 +138,39 @@ func (m *Manager) ResolvePlayPath(path, defaultName string) (string, string, err
 	return fullPath, dispName, nil
 }
 
+// SetOnStart registers a callback fired when a queued follow-up audio starts automatically.
+func (m *Manager) SetOnStart(fn func(code, name string)) {
+	m.mu.Lock()
+	m.onStart = fn
+	m.mu.Unlock()
+}
+
 func (m *Manager) PlayFile(absOrRelPath, code, name string) error {
-	resolvedPath, dispName, err := m.ResolvePlayPath(absOrRelPath, name)
+	return m.PlayFileThen(absOrRelPath, code, name)
+}
+
+// PlayFileThen plays an audio and queues follow-up audios that start automatically,
+// one after another, as soon as the previous one finishes naturally.
+// Any later PlayFile/Stop cancels the remaining queue.
+func (m *Manager) PlayFileThen(absOrRelPath, code, name string, next ...QueueItem) error {
+	m.playMu.Lock()
+	defer m.playMu.Unlock()
+
+	m.mu.Lock()
+	m.gen++
+	m.pending = append([]QueueItem(nil), next...)
+	m.mu.Unlock()
+
+	return m.startLocked(absOrRelPath, code, name)
+}
+
+// startLocked resolves and plays one item. Caller must hold playMu.
+func (m *Manager) startLocked(path, code, name string) error {
+	resolvedPath, dispName, err := m.ResolvePlayPath(path, name)
 	if err != nil {
+		m.mu.Lock()
+		m.pending = nil
+		m.mu.Unlock()
 		return err
 	}
 
@@ -138,8 +185,36 @@ func (m *Manager) PlayFile(absOrRelPath, code, name string) error {
 	return m.player.Play(resolvedPath)
 }
 
-func (m *Manager) Stop() error {
+// playNextQueued starts the next queued follow-up audio if nothing newer happened since gen.
+func (m *Manager) playNextQueued(gen uint64) {
+	m.playMu.Lock()
+	defer m.playMu.Unlock()
+
 	m.mu.Lock()
+	if m.gen != gen || len(m.pending) == 0 {
+		m.mu.Unlock()
+		return
+	}
+	item := m.pending[0]
+	m.pending = m.pending[1:]
+	startCb := m.onStart
+	m.mu.Unlock()
+
+	if err := m.startLocked(item.Path, item.Code, item.Name); err != nil {
+		return
+	}
+	if startCb != nil {
+		startCb(item.Code, item.Name)
+	}
+}
+
+func (m *Manager) Stop() error {
+	m.playMu.Lock()
+	defer m.playMu.Unlock()
+
+	m.mu.Lock()
+	m.gen++
+	m.pending = nil
 	m.currentCode = ""
 	m.currentName = ""
 	m.mu.Unlock()
