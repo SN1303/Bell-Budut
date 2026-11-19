@@ -93,7 +93,10 @@ function initSSE() {
           document.getElementById('nextBellNotes').innerText = 'Semua jam bel untuk hari ini sudah berlalu';
         }
 
-        // 5. Server Speaker Status (Header status only - does not interfere with buttons)
+        // 5. Live "bel berbunyi" banner follows the real server speaker state
+        updateServerPlayingBanner(data);
+
+        // 6. Server Speaker Status (Header status only - does not interfere with buttons)
         const speakerStatus = document.getElementById('serverSpeakerStatus');
         if (data.is_server_playing) {
           speakerStatus.innerText = `Speaker: 🔊 Memutar (${data.current_playing})`;
@@ -151,18 +154,72 @@ function splitAudioChain(v) {
   return String(v || '').split(/[,;|]/).map(x => x.trim()).filter(Boolean);
 }
 
-function handleBellRingEvent(data) {
-  // 1. Show Ring Banner
-  const banner = document.getElementById('liveBellBanner');
-  document.getElementById('liveBellTitle').innerText = `🔔 ${data.title} (${data.time})`;
-  document.getElementById('liveBellSubtitle').innerText = `Kode: ${data.audio_code} | Nada: ${data.audio_name} | Grup: ${data.group_name}`;
-  banner.classList.remove('hidden');
-  banner.classList.add('bell-ring-active');
+// ==================== LIVE "BEL BERBUNYI" BANNER ====================
+// Visible whenever audio plays on the server speaker (scheduled bell, quick
+// trigger, "Bunyikan di Speaker" from any device, follow-up audio chain).
+let lastBellRing = null;          // { title, time, at, name }
+let serverPlayingSince = 0;
+let serverPlayingKey = '';
+let serverIdleTicks = 0;
+const baseDocTitle = document.title;
 
-  setTimeout(() => {
+function cleanPlayingName(s) {
+  return String(s || '').replace(/\s*\([^()]*\)\s*$/, '');
+}
+
+function renderLiveBellBanner(nowName, show) {
+  const banner = document.getElementById('liveBellBanner');
+  if (!banner) return;
+  if (!show) {
     banner.classList.add('hidden');
     banner.classList.remove('bell-ring-active');
-  }, 10000);
+    document.title = baseDocTitle;
+    return;
+  }
+  const recentBell = lastBellRing && (Date.now() - lastBellRing.at) < 15 * 60 * 1000 && serverPlayingKey !== 'idle';
+  const title = recentBell
+    ? `${lastBellRing.title}${lastBellRing.time ? ' (' + lastBellRing.time + ')' : ''}`
+    : 'Audio sedang berbunyi di speaker server';
+  const elapsed = serverPlayingSince ? Math.max(0, Math.floor((Date.now() - serverPlayingSince) / 1000)) : 0;
+  const mm = String(Math.floor(elapsed / 60)).padStart(2, '0');
+  const ss = String(elapsed % 60).padStart(2, '0');
+  document.getElementById('liveBellTitle').innerText = title;
+  document.getElementById('liveBellSubtitle').innerText = nowName
+    ? `Sedang diputar: ${nowName} • ${mm}:${ss}`
+    : 'Memutar di speaker server...';
+  banner.classList.remove('hidden');
+  banner.classList.add('bell-ring-active');
+  document.title = `🔔 ${nowName || 'Bel berbunyi'} - ${baseDocTitle}`;
+}
+
+function updateServerPlayingBanner(tick) {
+  if (tick.is_server_playing) {
+    serverIdleTicks = 0;
+    const key = tick.current_code || tick.current_playing || 'playing';
+    if (key !== serverPlayingKey) {
+      serverPlayingKey = key;
+      serverPlayingSince = Date.now();
+    }
+    renderLiveBellBanner(cleanPlayingName(tick.current_playing), true);
+    return;
+  }
+  // Not playing: keep a just-rung bell visible briefly (e.g. web-only audio), and
+  // tolerate a 1-2 tick gap between a bell and its follow-up audio.
+  serverIdleTicks++;
+  const justRang = lastBellRing && (Date.now() - lastBellRing.at) < 10000;
+  if (justRang || serverIdleTicks < 3) return;
+  if (serverPlayingKey) {
+    serverPlayingKey = '';
+    serverPlayingSince = 0;
+    lastBellRing = null;
+  }
+  renderLiveBellBanner('', false);
+}
+
+function handleBellRingEvent(data) {
+  // 1. Show Ring Banner (stays visible while the server speaker is playing, see updateServerPlayingBanner)
+  lastBellRing = { title: data.title || 'Bel Berbunyi', time: data.time || '', at: Date.now(), name: data.audio_name || '' };
+  renderLiveBellBanner(data.audio_name || '', true);
 
   // 2. Play Web Audio (if enabled by operator)
   if (webAudioEnabled && data.audio_url) {
