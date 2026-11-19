@@ -20,10 +20,12 @@ import (
 	"bell-budut/audio"
 	"bell-budut/database"
 	"bell-budut/excel"
+	"bell-budut/notify"
 	"bell-budut/scheduler"
 )
 
 type Server struct {
+	port        int
 	db          *database.DB
 	audioMgr    *audio.Manager
 	sched       *scheduler.Scheduler
@@ -50,6 +52,13 @@ func NewServer(db *database.DB, audioMgr *audio.Manager, sched *scheduler.Schedu
 		}
 		data, _ := json.Marshal(stopPayload)
 		s.sched.Broadcast(data)
+	})
+
+	// Popup "sedang berbunyi" di pojok kanan bawah layar server (dengan tombol Hentikan)
+	s.audioMgr.SetOnPlay(func(code, name string) {
+		if s.db.GetSetting("desktop_popup_enabled", "true") != "false" {
+			notify.ShowPopup(s.port)
+		}
 	})
 
 	// Auto-broadcast when a queued follow-up audio (e.g. Mars after the bell) starts
@@ -100,6 +109,7 @@ func (s *Server) Routes() http.Handler {
 	mux.HandleFunc("/api/audio/delete/", s.requireAuth(s.handleAudioDelete))
 	mux.HandleFunc("/api/audio/test-server", s.handleAudioTestServer)
 	mux.HandleFunc("/api/audio/stop-server", s.handleAudioStopServer)
+	mux.HandleFunc("/api/audio/now", s.handleAudioNow)
 
 	// Groups
 	mux.HandleFunc("/api/groups", s.handleGroups)

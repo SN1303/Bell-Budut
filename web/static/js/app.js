@@ -2463,6 +2463,8 @@ async function loadSettings() {
     document.getElementById('settingSchoolName').value = s.school_name || 'SMK BUDI UTOMO WAY JEPARA';
     document.getElementById('settingServerAudio').checked = s.server_audio_enabled !== 'false';
     document.getElementById('settingHolidayMode').checked = s.holiday_mode === 'true';
+    const popupEl = document.getElementById('settingDesktopPopup');
+    if (popupEl) popupEl.checked = s.desktop_popup_enabled !== 'false';
 
     // Load Windows Auto-Start status
     loadAutoStartStatus();
@@ -2511,7 +2513,8 @@ async function saveSettings() {
   const payload = {
     school_name: document.getElementById('settingSchoolName').value.trim(),
     server_audio_enabled: document.getElementById('settingServerAudio').checked ? 'true' : 'false',
-    holiday_mode: document.getElementById('settingHolidayMode').checked ? 'true' : 'false'
+    holiday_mode: document.getElementById('settingHolidayMode').checked ? 'true' : 'false',
+    desktop_popup_enabled: document.getElementById('settingDesktopPopup').checked ? 'true' : 'false'
   };
 
   try {

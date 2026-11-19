@@ -127,3 +127,16 @@ git push origin v4.6.0
 GitHub Actions (`.github/workflows/release.yml`) otomatis membangun `bell-budut.exe`, membungkusnya bersama folder `web/` menjadi `bell-budut-windows-amd64.zip` (+ file `.sha256`), lalu menerbitkannya sebagai Release.
 
 **Memperbarui di komputer sekolah:** buka **Pengaturan → Update Aplikasi → Cek Update → Update Sekarang** (perlu PIN admin). Aplikasi mengunduh rilis, mencocokkan checksum, mengganti `bell-budut.exe` dan folder `web/`, lalu restart sendiri. Folder `data/` (database, jadwal, audio) tidak pernah diubah.
+
+## Installer Siap Pakai (Setup.exe)
+
+Klik 2x **`Buat_Installer.bat`** untuk membuat `dist\BellBudut-Setup.exe`, yaitu satu file yang berisi aplikasi plus **data saat ini** (jadwal, pengaturan, PIN admin, dan semua audio).
+
+Di komputer tujuan, cukup klik 2x `BellBudut-Setup.exe`, lalu installer akan:
+1. memasang aplikasi ke `C:\BellBudut` (folder bisa diganti), dengan pilihan untuk mempertahankan data lama bila sudah pernah terpasang;
+2. membuat shortcut di Desktop: *Bel Sekolah*, *Bel Sekolah - Layar Kiosk*, *Nyalakan Bel Sekolah*;
+3. mengaktifkan auto-start saat Windows menyala;
+4. membuka firewall port 8080 (kalau dijalankan dengan *Run as administrator*);
+5. menjalankan aplikasi dan membuka dashboard.
+
+> File Setup.exe berisi data sekolah. Jangan diunggah ke GitHub (folder `dist/` sudah di-ignore).

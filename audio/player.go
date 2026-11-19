@@ -31,6 +31,7 @@ type Manager struct {
 	gen         uint64     // incremented on every explicit PlayFile/Stop
 	pending     []QueueItem
 	onStart     func(code, name string)
+	onPlay      func(code, name string) // fired whenever any audio starts on the speaker
 	player      Player
 	audioDir    string
 	mu          sync.RWMutex
@@ -182,7 +183,23 @@ func (m *Manager) startLocked(path, code, name string) error {
 	if m.player == nil {
 		return errors.New("audio player tidak tersedia pada platform ini")
 	}
-	return m.player.Play(resolvedPath)
+	if err := m.player.Play(resolvedPath); err != nil {
+		return err
+	}
+	m.mu.RLock()
+	playCb := m.onPlay
+	m.mu.RUnlock()
+	if playCb != nil {
+		go playCb(code, dispName)
+	}
+	return nil
+}
+
+// SetOnPlay registers a callback fired whenever audio starts playing on the speaker.
+func (m *Manager) SetOnPlay(fn func(code, name string)) {
+	m.mu.Lock()
+	m.onPlay = fn
+	m.mu.Unlock()
 }
 
 // playNextQueued starts the next queued follow-up audio if nothing newer happened since gen.

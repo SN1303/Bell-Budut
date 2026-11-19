@@ -97,3 +97,16 @@ func (s *Server) handleUpdateApply(w http.ResponseWriter, r *http.Request) {
 		}
 	}()
 }
+
+// SetPort tells the server which HTTP port it listens on (used by the desktop popup).
+func (s *Server) SetPort(port int) { s.port = port }
+
+// GET /api/audio/now - what is playing on the server speaker right now (used by the desktop popup)
+func (s *Server) handleAudioNow(w http.ResponseWriter, r *http.Request) {
+	playing, code, name := s.audioMgr.CurrentStatus()
+	s.jsonSuccess(w, map[string]interface{}{
+		"playing": playing,
+		"code":    code,
+		"name":    name,
+	})
+}

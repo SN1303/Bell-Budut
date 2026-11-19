@@ -41,3 +41,7 @@ Thumbs.db
 tmp/
 temp/
 
+
+# Installer build output (berisi data sekolah, jangan di-commit)
+dist/
+installer/payload.zip

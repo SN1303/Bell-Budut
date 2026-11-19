@@ -626,6 +626,18 @@
           <input type="checkbox" id="settingServerAudio" class="w-5 h-5 text-blue-600 rounded">
         </div>
 
+        <!-- Desktop Popup Toggle -->
+        <div class="flex items-center justify-between p-3 bg-green-50 rounded-lg border border-green-200">
+          <div>
+            <div class="text-sm font-bold text-green-900 flex items-center space-x-1.5">
+              <span>🔔</span>
+              <span>Popup Notifikasi di Layar Server</span>
+            </div>
+            <div class="text-xs text-green-800">Saat bel/audio berbunyi, muncul kotak kecil di pojok kanan bawah layar komputer server berisi nama audio dan tombol <b>Hentikan Audio</b>. Tetap muncul walaupun notifikasi Windows dimatikan.</div>
+          </div>
+          <input type="checkbox" id="settingDesktopPopup" class="w-5 h-5 text-green-600 rounded">
+        </div>
+
         <!-- Windows Auto-Start Toggle -->
         <div class="flex items-center justify-between p-3 bg-blue-50 rounded-lg border border-blue-200">
           <div>
@@ -1280,7 +1292,7 @@
   <audio id="browserAudioPlayer" preload="auto"></audio>
 
   <!-- Load Main Application Logic -->
-  <script src="/static/js/app.js?v=5.5"></script>
+  <script src="/static/js/app.js?v=5.6"></script>
 </body>
 </html>
 

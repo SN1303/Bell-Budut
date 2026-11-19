@@ -63,6 +63,7 @@ func main() {
 	// 4. Initialize Web Server
 	fmt.Println("[4/4] Menyiapkan server web UI berbasis Tailwind CSS ...")
 	server := web.NewServer(db, audioMgr, sched, *audioDir)
+	server.SetPort(*port)
 	handler := server.Routes()
 
 	addr := fmt.Sprintf(":%d", *port)
