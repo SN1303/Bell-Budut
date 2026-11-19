@@ -1,0 +1,45 @@
+name: Release
+
+# Push a tag like v4.6.0 to build bell-budut.exe and publish a GitHub Release.
+# The app's "Cek Update" button installs that release over the air (OTA).
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Test
+        run: go test ./audio/ ./updater/
+
+      - name: Build Windows package
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          mkdir -p dist/pkg
+          GOOS=windows GOARCH=amd64 CGO_ENABLED=0 go build -trimpath \
+            -ldflags "-s -w -X bell-budut/version.Version=${VERSION}" \
+            -o dist/pkg/bell-budut.exe .
+          cp -r web dist/pkg/web
+          cp Jalankan_Bel.bat Jalankan_Background.vbs Pasang_AutoStart_Windows.bat Hapus_AutoStart_Windows.bat README.md dist/pkg/
+          mkdir -p dist/pkg/data/audio/sistem
+          cp data/audio/sistem/*.wav dist/pkg/data/audio/sistem/ || true
+          cd dist/pkg && zip -r ../bell-budut-windows-amd64.zip . && cd ..
+          sha256sum bell-budut-windows-amd64.zip > bell-budut-windows-amd64.zip.sha256
+
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            dist/bell-budut-windows-amd64.zip
+            dist/bell-budut-windows-amd64.zip.sha256
+          generate_release_notes: true

@@ -112,3 +112,18 @@ F:\1. Projek\Bell Budut\
     └── audio/              // Tempat penyimpanan file WAV/MP3
 ```
 
+
+## Rilis & Update Otomatis (OTA)
+
+Versi aplikasi dikendalikan dari GitHub Releases di repo `SN1303/Bell-Budut`.
+
+**Menerbitkan versi baru (developer):**
+
+```bash
+git tag v4.6.0
+git push origin v4.6.0
+```
+
+GitHub Actions (`.github/workflows/release.yml`) otomatis membangun `bell-budut.exe`, membungkusnya bersama folder `web/` menjadi `bell-budut-windows-amd64.zip` (+ file `.sha256`), lalu menerbitkannya sebagai Release.
+
+**Memperbarui di komputer sekolah:** buka **Pengaturan → Update Aplikasi → Cek Update → Update Sekarang** (perlu PIN admin). Aplikasi mengunduh rilis, mencocokkan checksum, mengganti `bell-budut.exe` dan folder `web/`, lalu restart sendiri. Folder `data/` (database, jadwal, audio) tidak pernah diubah.

@@ -34,9 +34,6 @@
         <div>
           <div class="flex items-center space-x-2">
             <h1 class="text-xl font-bold tracking-tight" id="headerSchoolName">SMK / SMA BUDUT</h1>
-            <span class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-black bg-amber-400 text-blue-950 shadow-md border border-amber-300">
-              <span>⚡</span><span>v4.5</span>
-            </span>
           </div>
           <p class="text-xs text-blue-200">Sistem Bel Sekolah Otomatis & Terjadwal</p>
         </div>
@@ -171,18 +168,18 @@
 
     </div>
 
-    <!-- Quick Emergency & Manual Controls Bar -->
+    <!-- Quick Manual Controls Bar -->
     <div class="bg-gradient-to-r from-blue-900 to-indigo-900 rounded-xl p-4 shadow-sm text-white flex flex-wrap items-center justify-between gap-4">
       <div class="flex items-center space-x-3">
         <span class="text-2xl">⚡</span>
         <div>
-          <div class="font-bold text-sm">Aksi Cepat & Bel Darurat</div>
-          <div class="text-xs text-blue-200">Bunyikan nada bel seketika atau sirine evakuasi tanpa menunggu jam jadwal</div>
+          <div class="font-bold text-sm">Aksi Cepat</div>
+          <div class="text-xs text-blue-200">Bunyikan nada bel seketika tanpa menunggu jam jadwal</div>
         </div>
       </div>
 
       <div class="flex items-center flex-wrap gap-2">
-        <button onclick="triggerQuickBell('AUD-05', 'Bel 1x Tit')" class="px-3 py-1.5 bg-blue-800 hover:bg-blue-700 text-white rounded-lg text-xs font-semibold shadow transition">
+        <button onclick="triggerQuickSystemBell('bel_tit_pendek', 'AUD-04', 'Bel 1x Tit')" class="px-3 py-1.5 bg-blue-800 hover:bg-blue-700 text-white rounded-lg text-xs font-semibold shadow transition">
           🔔 1x Tit (Bip)
         </button>
         <button onclick="triggerQuickBell('AUD-02', 'Bel 2 Nada (Ding-Dong)')" class="px-3 py-1.5 bg-blue-800 hover:bg-blue-700 text-white rounded-lg text-xs font-semibold shadow transition">
@@ -194,9 +191,8 @@
         <button onclick="triggerQuickBell('AUD-03', 'Bel Westminster 4 Nada')" class="px-3 py-1.5 bg-blue-800 hover:bg-blue-700 text-white rounded-lg text-xs font-semibold shadow transition">
           🔔 Bel Masuk / Pulang
         </button>
-        <button onclick="openEmergencyModal()" class="px-3.5 py-1.5 bg-red-600 hover:bg-red-500 text-white rounded-lg text-xs font-bold shadow flex items-center space-x-1 animate-pulse">
-          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg>
-          <span>SIRINE DARURAT</span>
+        <button onclick="triggerQuickBell('AUD-20', 'Kumpul di Lapangan')" class="px-3 py-1.5 bg-green-600 hover:bg-green-500 text-white rounded-lg text-xs font-bold shadow transition">
+          📢 Kumpul di Lapangan
         </button>
       </div>
     </div>
@@ -579,6 +575,39 @@
 
     <!-- TAB 6: SETTINGS -->
     <section id="tabContent-settings" class="tab-content hidden space-y-6">
+      <!-- OTA Update Card -->
+      <div class="bg-white p-6 rounded-xl shadow-sm border border-gray-200 max-w-2xl space-y-4">
+        <div class="flex items-start justify-between flex-wrap gap-3">
+          <div>
+            <h3 class="text-lg font-bold text-gray-800 flex items-center gap-2"><span>⬆️</span><span>Update Aplikasi</span></h3>
+            <p class="text-xs text-gray-500 mt-0.5">Versi baru diambil langsung dari GitHub. Database, jadwal, dan audio tidak akan terhapus.</p>
+          </div>
+          <div class="text-right">
+            <div class="text-[11px] text-gray-500 font-semibold uppercase tracking-wide">Versi terpasang</div>
+            <div class="font-mono font-extrabold text-blue-900 text-lg" id="updateCurrentVersion">-</div>
+          </div>
+        </div>
+
+        <div id="updateStatusBox" class="p-3 rounded-lg border border-gray-200 bg-gray-50 text-sm text-gray-600">
+          Klik <b>Cek Update</b> untuk melihat versi terbaru.
+        </div>
+
+        <div id="updateNotesBox" class="hidden">
+          <div class="text-xs font-bold text-gray-700 mb-1">Catatan rilis:</div>
+          <pre id="updateNotes" class="text-xs text-gray-700 bg-gray-50 border border-gray-200 rounded-lg p-3 max-h-48 overflow-y-auto whitespace-pre-wrap font-sans"></pre>
+        </div>
+
+        <div class="flex flex-wrap gap-2">
+          <button onclick="checkAppUpdate(true)" id="btnCheckUpdate" class="px-4 py-2 bg-gray-100 hover:bg-gray-200 border border-gray-300 rounded-lg text-sm font-semibold text-gray-800 transition cursor-pointer">
+            🔄 Cek Update
+          </button>
+          <button onclick="applyAppUpdate()" id="btnApplyUpdate" class="hidden px-4 py-2 bg-green-700 hover:bg-green-600 text-white rounded-lg text-sm font-bold shadow transition cursor-pointer">
+            ⬇️ Update Sekarang
+          </button>
+          <a id="updateReleaseLink" href="#" target="_blank" rel="noopener" class="hidden px-4 py-2 text-sm font-semibold text-blue-700 hover:underline">Lihat di GitHub ↗</a>
+        </div>
+      </div>
+
       <div class="bg-white p-6 rounded-xl shadow-sm border border-gray-200 max-w-2xl space-y-6">
         <h3 class="text-lg font-bold text-gray-800">Pengaturan Sistem</h3>
 
@@ -705,7 +734,8 @@
       <div>Sistem Bel Sekolah Otomatis • Powered by Golang & Tailwind CSS</div>
       <div class="flex items-center space-x-1.5">
         <span>Single-Binary Portabel • Budut Edition</span>
-        <span class="font-mono font-bold text-blue-900 bg-blue-100 border border-blue-300 px-2 py-0.5 rounded text-[11px]">Versi 4.2</span>
+        <span id="footerVersion" class="font-mono font-bold text-blue-900 bg-blue-100 border border-blue-300 px-2 py-0.5 rounded text-[11px]">Versi -</span>
+        <button id="footerUpdateBadge" onclick="switchTab('settings')" class="hidden font-bold text-white bg-green-600 hover:bg-green-500 px-2 py-0.5 rounded text-[11px] cursor-pointer">Update tersedia</button>
       </div>
     </div>
   </footer>
@@ -1081,25 +1111,6 @@
     </div>
   </div>
 
-  <!-- 7. Emergency Siren Modal -->
-  <div id="modalEmergency" class="hidden fixed inset-0 bg-black bg-opacity-70 z-50 flex items-center justify-center p-4">
-    <div class="bg-white rounded-2xl max-w-sm w-full p-6 shadow-2xl text-center space-y-4 border-2 border-red-500">
-      <div class="w-16 h-16 bg-red-100 text-red-600 rounded-full flex items-center justify-center mx-auto text-3xl animate-bounce">
-        🚨
-      </div>
-      <div>
-        <h3 class="text-xl font-extrabold text-red-600 uppercase tracking-tight">Konfirmasi Sirine Darurat</h3>
-        <p class="text-xs text-gray-600 mt-2">
-          Sirine evakuasi / bahaya akan langsung dibunyikan keras di speaker server sekolah. Pastikan situasi ini benar-benar darurat atau simulasi resmi!
-        </p>
-      </div>
-      <div class="flex space-x-2 pt-2">
-        <button onclick="closeModal('modalEmergency')" class="w-1/2 py-2.5 bg-gray-200 hover:bg-gray-300 rounded-lg text-sm font-semibold text-gray-800 transition">Batal</button>
-        <button onclick="confirmEmergencyTrigger()" class="w-1/2 py-2.5 bg-red-600 hover:bg-red-700 rounded-lg text-sm font-bold text-white transition animate-pulse">BUNYIKAN SEKARANG</button>
-      </div>
-    </div>
-  </div>
-
   <!-- 8. Restore DB Modal -->
   <div id="modalRestore" class="hidden fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
     <div class="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-4 border border-red-300">
@@ -1269,7 +1280,7 @@
   <audio id="browserAudioPlayer" preload="auto"></audio>
 
   <!-- Load Main Application Logic -->
-  <script src="/static/js/app.js?v=5.2"></script>
+  <script src="/static/js/app.js?v=5.5"></script>
 </body>
 </html>
 

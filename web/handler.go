@@ -120,6 +120,11 @@ func (s *Server) Routes() http.Handler {
 	mux.HandleFunc("/api/trigger-manual", s.requireAuth(s.handleTriggerManual))
 	mux.HandleFunc("/api/toggle-holiday", s.requireAuth(s.handleToggleHoliday))
 	mux.HandleFunc("/api/settings", s.handleSettings)
+
+	// Version & OTA update from GitHub Releases
+	mux.HandleFunc("/api/version", s.handleVersion)
+	mux.HandleFunc("/api/update/check", s.handleUpdateCheck)
+	mux.HandleFunc("/api/update/apply", s.requireAuth(s.handleUpdateApply))
 	mux.HandleFunc("/api/autostart", s.handleAutoStart)
 
 	// System Audio Isolator & Windows Settings Helpers

@@ -16,6 +16,8 @@ import (
 	"bell-budut/audio"
 	"bell-budut/database"
 	"bell-budut/scheduler"
+	"bell-budut/updater"
+	"bell-budut/version"
 	"bell-budut/web"
 )
 
@@ -27,8 +29,11 @@ func main() {
 
 	fmt.Println("==================================================================")
 	fmt.Println("          SISTEM BEL SEKOLAH OTOMATIS & TERJADWAL                ")
-	fmt.Println("                    BELL BUDUT v1.0.0                             ")
+	fmt.Printf("                    BELL BUDUT v%s\n", version.Version)
 	fmt.Println("==================================================================")
+
+	// Remove leftovers of a previous OTA update (old exe)
+	updater.CleanupOld()
 
 	// Ensure directories exist
 	if err := os.MkdirAll(*audioDir, 0755); err != nil {
@@ -88,16 +93,43 @@ func main() {
 	fmt.Println("Tekan Ctrl+C di terminal ini untuk mematikan aplikasi.")
 	fmt.Println("==================================================================")
 
-	// Start server in background
+	// Start server in background.
+	// After an OTA update the previous process may still hold the port for a moment,
+	// so keep retrying the bind for up to 30 seconds.
 	go func() {
-		if err := httpServer.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+		var ln net.Listener
+		var err error
+		for attempt := 0; attempt < 30; attempt++ {
+			ln, err = net.Listen("tcp", addr)
+			if err == nil {
+				break
+			}
+			time.Sleep(1 * time.Second)
+		}
+		if err != nil {
+			log.Fatalf("Server error: %v", err)
+		}
+		if err := httpServer.Serve(ln); err != nil && err != http.ErrServerClosed {
 			log.Fatalf("Server error: %v", err)
 		}
 	}()
 
-	// Graceful shutdown on SIGINT/SIGTERM
+	// Graceful shutdown on SIGINT/SIGTERM, or after an OTA update
 	stopChan := make(chan os.Signal, 1)
 	signal.Notify(stopChan, os.Interrupt, syscall.SIGTERM)
+
+	server.SetRestartFunc(func() {
+		fmt.Println("\nUpdate terpasang, menjalankan versi baru...")
+		if err := updater.Restart(); err != nil {
+			log.Printf("Gagal menjalankan versi baru: %v", err)
+			return
+		}
+		select {
+		case stopChan <- os.Interrupt:
+		default:
+		}
+	})
+
 	<-stopChan
 
 	fmt.Println("\nMematikan aplikasi bel sekolah dengan aman...")
@@ -126,4 +158,3 @@ func getLocalIPAddresses() []string {
 	}
 	return ips
 }
-

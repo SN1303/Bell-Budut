@@ -24,6 +24,8 @@ window.addEventListener('DOMContentLoaded', async () => {
   loadSettings();
   loadLogs();
   loadWindowsSoundsStatus();
+  loadAppVersion();
+  checkAppUpdate(false);
 });
 
 // ==================== SSE REAL-TIME LISTENER ====================
@@ -128,6 +130,9 @@ function initSSE() {
           updateAllPlayButtonsUI();
           showFloatingPlayerBar('Speaker Server (Soundcard)', `[${data.audio_code}] ${data.audio_name}`);
         }
+      } else if (data.type === 'APP_UPDATING') {
+        showToast(`Aplikasi sedang diperbarui ke versi ${data.version}, halaman akan dimuat ulang...`, 'info');
+        waitForNewVersion(data.version);
       } else if (data.type === 'BELL_RING') {
         // Live Bell Ring Event
         handleBellRingEvent(data);
@@ -2088,7 +2093,7 @@ async function playSpecificFolderSong(code, fileName) {
   }
 }
 
-// ==================== QUICK TRIGGERS & EMERGENCY ====================
+// ==================== QUICK TRIGGERS ====================
 
 async function triggerQuickBell(code, title) {
   if (!requireAdmin(`membunyikan ${title}`)) return;
@@ -2111,30 +2116,11 @@ async function triggerQuickBell(code, title) {
   } catch (err) {}
 }
 
-function openEmergencyModal() {
-  if (!requireAdmin('mengakses sirine darurat')) return;
-  openModal('modalEmergency');
-}
-
-async function confirmEmergencyTrigger() {
-  closeModal('modalEmergency');
-  try {
-    const res = await authFetch('/api/trigger-manual', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        audio_code: 'AUD-04',
-        trigger_type: 'EMERGENCY',
-        custom_title: '🚨 SIRINE DARURAT EVAKUASI'
-      })
-    });
-    const json = await res.json();
-    if (json.success) {
-      showToast('SIRINE DARURAT DIBUNYIKAN!', 'error');
-    } else {
-      showToast(json.error, 'error');
-    }
-  } catch (err) {}
+// Quick bell buttons for system chimes: resolve by file name, because codes
+// of the built-in chimes differ between installations.
+function triggerQuickSystemBell(fileHint, fallbackCode, title) {
+  const a = (globalAudios || []).find(x => (x.filename || '').toLowerCase().includes(fileHint));
+  triggerQuickBell(a ? a.code : fallbackCode, title);
 }
 
 async function toggleHolidayMode() {
@@ -2702,3 +2688,120 @@ async function toggleWindowsSoundsMute(mute) {
   }
 }
 
+
+
+// ==================== OTA UPDATE (GitHub Releases) ====================
+let appCurrentVersion = '';
+
+async function loadAppVersion() {
+  try {
+    const res = await fetch('/api/version');
+    const json = await res.json();
+    if (!json.success) return;
+    appCurrentVersion = json.data.version;
+    const footer = document.getElementById('footerVersion');
+    if (footer) footer.innerText = `Versi ${appCurrentVersion}`;
+    const cur = document.getElementById('updateCurrentVersion');
+    if (cur) cur.innerText = appCurrentVersion;
+  } catch (e) {}
+}
+
+async function checkAppUpdate(manual) {
+  const box = document.getElementById('updateStatusBox');
+  const btnApply = document.getElementById('btnApplyUpdate');
+  const btnCheck = document.getElementById('btnCheckUpdate');
+  const notesBox = document.getElementById('updateNotesBox');
+  const link = document.getElementById('updateReleaseLink');
+  const badge = document.getElementById('footerUpdateBadge');
+
+  if (manual && btnCheck) { btnCheck.disabled = true; btnCheck.innerText = '⏳ Mengecek...'; }
+  try {
+    const res = await fetch(`/api/update/check${manual ? '?force=1' : ''}`);
+    const json = await res.json();
+    if (!json.success) {
+      if (manual && box) {
+        box.className = 'p-3 rounded-lg border border-amber-200 bg-amber-50 text-sm text-amber-900';
+        box.innerText = `Tidak bisa mengecek update: ${json.error}`;
+      }
+      return;
+    }
+    const d = json.data;
+    const rel = d.release || {};
+    if (badge) badge.classList.toggle('hidden', !d.has_update);
+    if (!box) return;
+
+    if (link && rel.html_url) { link.href = rel.html_url; link.classList.remove('hidden'); }
+    if (notesBox) {
+      const notes = (rel.notes || '').trim();
+      notesBox.classList.toggle('hidden', !(d.has_update && notes));
+      document.getElementById('updateNotes').innerText = notes;
+    }
+
+    if (d.has_update) {
+      box.className = 'p-3 rounded-lg border border-green-300 bg-green-50 text-sm text-green-900';
+      box.innerHTML = `Versi baru tersedia: <b class="font-mono">${escapeHtml(d.latest)}</b> (terpasang: <span class="font-mono">${escapeHtml(d.current)}</span>)`;
+      if (btnApply) btnApply.classList.remove('hidden');
+    } else {
+      box.className = 'p-3 rounded-lg border border-gray-200 bg-gray-50 text-sm text-gray-700';
+      box.innerHTML = `✓ Aplikasi sudah versi terbaru (<span class="font-mono">${escapeHtml(d.current)}</span>). Rilis terbaru di GitHub: <span class="font-mono">${escapeHtml(d.latest || '-')}</span>`;
+      if (btnApply) btnApply.classList.add('hidden');
+    }
+  } catch (e) {
+    if (manual && box) box.innerText = 'Gagal terhubung ke server.';
+  } finally {
+    if (manual && btnCheck) { btnCheck.disabled = false; btnCheck.innerText = '🔄 Cek Update'; }
+  }
+}
+
+async function applyAppUpdate() {
+  if (!requireAdmin('memperbarui aplikasi')) return;
+  if (!confirm('Pasang versi terbaru sekarang?\n\nAplikasi akan restart sekitar 10-30 detik. Bel yang sedang berbunyi akan berhenti.')) return;
+
+  const box = document.getElementById('updateStatusBox');
+  const btnApply = document.getElementById('btnApplyUpdate');
+  if (btnApply) { btnApply.disabled = true; btnApply.innerText = '⏳ Mengunduh & memasang...'; }
+  if (box) {
+    box.className = 'p-3 rounded-lg border border-blue-200 bg-blue-50 text-sm text-blue-900';
+    box.innerText = 'Mengunduh update dari GitHub dan memasangnya... jangan tutup halaman ini.';
+  }
+  try {
+    const res = await authFetch('/api/update/apply', { method: 'POST' });
+    const json = await res.json();
+    if (!json.success) {
+      if (box) {
+        box.className = 'p-3 rounded-lg border border-red-200 bg-red-50 text-sm text-red-800';
+        box.innerText = `Update gagal: ${json.error}`;
+      }
+      if (btnApply) { btnApply.disabled = false; btnApply.innerText = '⬇️ Update Sekarang'; }
+      return;
+    }
+    if (box) box.innerText = json.data.message + ' Halaman akan dimuat ulang otomatis.';
+    waitForNewVersion(json.data.version);
+  } catch (e) {
+    // Connection may drop because the server restarts - keep waiting
+    waitForNewVersion('');
+  }
+}
+
+let waitingForVersion = false;
+function waitForNewVersion(target) {
+  if (waitingForVersion) return;
+  waitingForVersion = true;
+  const started = Date.now();
+  const timer = setInterval(async () => {
+    try {
+      const res = await fetch('/api/version', { cache: 'no-store' });
+      const json = await res.json();
+      const v = json.success ? json.data.version : '';
+      if (v && v !== appCurrentVersion && (!target || v === target)) {
+        clearInterval(timer);
+        location.reload();
+      }
+    } catch (e) { /* server restarting */ }
+    if (Date.now() - started > 120000) {
+      clearInterval(timer);
+      waitingForVersion = false;
+      showToast('Update belum terdeteksi. Coba muat ulang halaman secara manual.', 'warning');
+    }
+  }, 2000);
+}
